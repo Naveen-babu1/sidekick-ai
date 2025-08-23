@@ -42,8 +42,6 @@ export class LocalAIProvider {
     
     private models: ModelConfig[] = [
         { name: 'deepseek-coder:6.7b', size: '6.7GB', purpose: 'completion', contextWindow: 16384 },
-        { name: 'codellama:7b', size: '7GB', purpose: 'chat', contextWindow: 4096 },
-        { name: 'starcoder2:3b', size: '3GB', purpose: 'completion', contextWindow: 8192 },
         { name: 'nomic-embed-text', size: '274MB', purpose: 'embedding', contextWindow: 8192 }
     ];
     
@@ -178,7 +176,7 @@ export class LocalAIProvider {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: 'codellama:7b',  // Better for explanations
+                    model: 'deepseek-coder:6.7b',  // Better for explanations
                     prompt: prompt,
                     stream: false,
                     options: {
@@ -293,7 +291,7 @@ Generate comprehensive tests with edge cases:`;
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: 'codellama:7b',
+                    model: 'deepseek-coder:6.7b',
                     prompt: `Context: ${context}\n\nUser: ${message}\n\nAssistant:`,
                     stream: true
                 })

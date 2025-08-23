@@ -22,7 +22,7 @@
   "contributes": {
     "commands": [
       {
-        "command": "sidekick-ai.Explain",
+        "command": "sidekick-ai.explain",
         "title": "Explain Code (Local AI)",
         "icon": "$(comment-discussion)"
       },
@@ -140,17 +140,20 @@
         {
           "when": "editorTextFocus",
           "command": "sidekick-ai.explain",
-          "group": "sidekick-ai@1"
+          "group": "sidekick-ai@1",
+          "title": "Explain Code (Local AI)"
         },
         {
           "when": "editorTextFocus",
           "command": "sidekick-ai.refactor",
-          "group": "sidekick-ai@2"
+          "group": "sidekick-ai@2",
+          "title": "Refactor Code (Local AI)"
         },
         {
           "when": "editorTextFocus",
           "command": "sidekick-ai.generateTests",
-          "group": "sidekick-ai@3"
+          "group": "sidekick-ai@3",
+          "title": "Generate Tests (Local AI)"
         }
       ]
     }
