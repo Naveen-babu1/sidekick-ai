@@ -24,7 +24,11 @@
       {
         "command": "sidekick-ai.openChat",
         "title": "Open Chat",
-        "category": "sidekick AI"
+        "category": "sidekick AI",
+        "icon": {
+          "light": "resources/icon.svg",
+          "dark": "resources/icon.svg"
+        }
       },
       {
         "command": "sidekick-ai.explain",
@@ -173,26 +177,47 @@
       }
     },
     "menus": {
+       "editor/title": [
+        {
+          "command": "sidekick-ai.openChat",
+          "group": "navigation",
+          "when": "editorIsOpen"
+        }
+      ],
       "editor/context": [
+        {
+          "command": "sidekick-ai.openChat",
+          "group": "sidekick-ai@0",
+          "when": "editorTextFocus"
+        },
         {
           "when": "editorTextFocus",
           "command": "sidekick-ai.explain",
           "group": "sidekick-ai@1",
-          "title": "Explain Code (Local AI)"
+          "title": "Explain Code - sidekick-ai"
         },
         {
           "when": "editorTextFocus",
           "command": "sidekick-ai.refactor",
           "group": "sidekick-ai@2",
-          "title": "Refactor Code (Local AI)"
+          "title": "Refactor Code - sidekick-ai"
         },
         {
           "when": "editorTextFocus",
           "command": "sidekick-ai.generateTests",
           "group": "sidekick-ai@3",
-          "title": "Generate Tests (Local AI)"
+          "title": "Generate Tests - sidekick-ai"
         }
       ]
+    }
+  },
+  "icons": {
+    "sidekick-icon": {
+      "description": "Sidekick AI Icon",
+      "default": {
+        "fontPath": "resources/icon.svg",
+        "fontCharacter": "\\E001"
+      }
     }
   },
   "scripts": {

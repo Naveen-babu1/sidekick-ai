@@ -272,6 +272,9 @@ You can also just chat naturally about your code!`;
     // Replace the _getWebviewContent() method in your ChatPanel class with this fixed version:
 
 private _getWebviewContent() {
+    // Get the SVG URI
+    const iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'resources', 'icon.svg');
+    const iconUri = this._panel.webview.asWebviewUri(iconPath);
     return `<!DOCTYPE html>
     <html lang="en">
     <head>
@@ -484,6 +487,13 @@ private _getWebviewContent() {
         </style>
     </head>
     <body>
+    <div class="chat-header">
+            <span style="display: flex; align-items: center; gap: 8px;">
+                <img src="${iconUri}" width="20" height="20" alt="Sidekick AI"/>
+                <span>Sidekick AI Chat</span>
+            </span>
+            <button onclick="clearChat()">Clear</button>
+        </div>
         <div class="chat-container">
             <div class="chat-header">
                 <span style="font-weight: 600;">🤖 Sidekick AI Chat</span>
@@ -988,6 +998,67 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     })
   );
+
+  // Add a Chat button to the status bar with custom icon
+  const chatStatusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    99  // Priority
+  );
+  
+  // For SVG icons in status bar, you need to use it as a background image
+  // VS Code doesn't directly support SVG in status bar text, so we use codicon or text
+  chatStatusBarItem.text = "$(comment-discussion) AI Chat";
+  chatStatusBarItem.tooltip = "Open Sidekick AI Chat";
+  chatStatusBarItem.command = "sidekick-ai.openChat";
+  chatStatusBarItem.show();
+  
+  context.subscriptions.push(chatStatusBarItem);
+
+  // Alternative: Create a custom webview button that can use SVG
+  const createFloatingButton = () => {
+    const button = vscode.window.createWebviewPanel(
+      'sidekickButton',
+      'Sidekick Button',
+      { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
+      { enableScripts: true }
+    );
+
+    const iconPath = vscode.Uri.joinPath(context.extensionUri, 'resources', 'public', 'your-icon.svg');
+    const iconUri = button.webview.asWebviewUri(iconPath);
+
+    button.webview.html = `
+      <!DOCTYPE html>
+      <html>
+      <body style="padding: 0; margin: 0;">
+        <button onclick="openChat()" style="
+          background: transparent;
+          border: none;
+          cursor: pointer;
+          padding: 10px;
+        ">
+          <img src="${iconUri}" width="24" height="24" alt="Open Chat"/>
+        </button>
+        <script>
+          const vscode = acquireVsCodeApi();
+          function openChat() {
+            vscode.postMessage({ command: 'openChat' });
+          }
+        </script>
+      </body>
+      </html>
+    `;
+
+    button.webview.onDidReceiveMessage(
+      message => {
+        if (message.command === 'openChat') {
+          vscode.commands.executeCommand('sidekick-ai.openChat');
+        }
+      },
+      undefined,
+      context.subscriptions
+    );
+  };
+
   // Add hover provider for automatic explanations
   const hoverProvider = vscode.languages.registerHoverProvider(
     { pattern: "**/*" },
