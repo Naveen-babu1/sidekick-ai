@@ -1,20 +1,28 @@
 {
   "name": "sidekick-ai",
-  "displayName": "sidekick-ai",
-  "description": "Local AI coding assistant",
-  "version": "0.0.1",
+  "displayName": "Sidekick AI - Local Coding Assistant",
+  "description": "Privacy-focused AI coding assistant that runs 100% locally on your machine",
+  "version": "1.0.0",
+  "publisher": "NaveenBabu",
   "engines": {
-    "vscode": "^1.74.0"
+    "vscode": "^1.85.0"
   },
   "categories": [
+    "Programming Languages",
+    "Machine Learning",
     "Other"
   ],
   "keywords": [
     "ai",
     "copilot",
+    "local AI",
+    "privacy copilot",
+    "coding assistant",
     "privacy",
     "local",
-    "offline",
+    "offline copilot",
+    "llama copilot",
+    "github copilot",
     "code completion"
   ],
   "activationEvents": ["onStartupFinished"],
@@ -233,7 +241,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "^22.17.2",
-    "@types/vscode": "^1.103.0",
+    "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^8.40.0",
     "@typescript-eslint/parser": "^8.40.0",
     "@vscode/test-cli": "^0.0.11",
@@ -247,9 +255,18 @@
     "natural": "^8.1.0",
     "vectra": "^0.11.1"
   },
-  "publisher": "Naveen Babu",
+  "icon": "resources/icon.png",  
+  "galleryBanner": {
+    "color": "#2b2b2b",
+    "theme": "dark"
+  },
   "repository": {
     "type": "git",
-    "url": "https://github.com/Naveen-babu1/sidekick-ai.git"
-  }
+    "url": "https://github.com/Naveen-babu1/sidekick-ai"
+  },
+  "homepage": "https://github.com/Naveen-babu1/sidekick-ai",
+  "bugs": {
+    "url": "https://github.com/Naveen-babu1/sidekick-ai"
+  },
+  "license": "MIT"
 }

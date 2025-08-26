@@ -89,7 +89,8 @@ export class LocalAIProvider {
     
     private async ensureModel(): Promise<string | null> {
 
-        const knownModelPath = 'C:\\Users\\navee\\sidekick-ai\\sidekick-ai\\.models\\deepseek-coder-1.3b.gguf';
+        const config = vscode.workspace.getConfiguration('sidekick-ai');
+        const knownModelPath = config.get<string>('modelPath') || path.join(os.homedir(), '.sidekick-ai', 'models', 'model.gguf');
     try {
         await fs.access(knownModelPath);
         console.log(`Found model at: ${knownModelPath}`);

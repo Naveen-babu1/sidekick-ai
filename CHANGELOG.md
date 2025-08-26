@@ -1,9 +1,10 @@
 # Change Log
 
-All notable changes to the "sidekick-ai" extension will be documented in this file.
-
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
-
-## [Unreleased]
-
+## [1.0.0] - 08-26-2025
 - Initial release
+- Local AI code completion
+- Chat interface
+- Code explanation and refactoring
+- Test generation
+- Privacy-focused design
+```
