@@ -3,7 +3,693 @@ import { LocalAIProvider } from "./providers/LocalAIProvider";
 import { CodeIndexer } from "./indexer/CodeIndexer";
 import { PrivacyGuard } from "./security/PrivacyGuard";
 import { InlineCompletionProvider } from "./providers/InlineCompletionProvider";
-import { ChatViewProvider } from "./providers/ChatViewProvider";
+
+// Chat Panel Class - Creates a webview panel on the right side
+class ChatPanel {
+    public static currentPanel: ChatPanel | undefined;
+    private readonly _panel: vscode.WebviewPanel;
+    private _disposables: vscode.Disposable[] = [];
+    private messages: Array<{role: string, content: string}> = [];
+
+    constructor(
+        panel: vscode.WebviewPanel,
+        private context: vscode.ExtensionContext,
+        private localAI: LocalAIProvider,
+        private indexer: CodeIndexer,
+        private privacyGuard: PrivacyGuard
+    ) {
+        this._panel = panel;
+        this._panel.webview.html = this._getWebviewContent();
+        
+        // Handle messages from the webview
+        this._panel.webview.onDidReceiveMessage(
+            async message => {
+                switch (message.type) {
+                    case 'sendMessage':
+                        await this.handleUserMessage(message.text);
+                        break;
+                    case 'clear':
+                        this.messages = [];
+                        this._panel.webview.postMessage({ type: 'clearMessages' });
+                        break;
+                    case 'insertCode':
+                        this.insertCodeAtCursor(message.code);
+                        break;
+                    case 'copyCode':
+                        await vscode.env.clipboard.writeText(message.code);
+                        vscode.window.showInformationMessage('Code copied to clipboard!');
+                        break;
+                }
+            },
+            undefined,
+            this._disposables
+        );
+
+        // Load saved messages
+        this.loadChatHistory();
+
+        this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+    }
+
+    public static createOrShow(
+        context: vscode.ExtensionContext,
+        localAI: LocalAIProvider,
+        indexer: CodeIndexer,
+        privacyGuard: PrivacyGuard
+    ) {
+        const column = vscode.ViewColumn.Two; // This makes it appear on the right
+
+        // If we already have a panel, show it
+        if (ChatPanel.currentPanel) {
+            ChatPanel.currentPanel._panel.reveal(column);
+            return;
+        }
+
+        // Create a new panel
+        const panel = vscode.window.createWebviewPanel(
+            'sidekickChat',
+            'Sidekick AI Chat',
+            column,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true,
+                localResourceRoots: [context.extensionUri]
+            }
+        );
+
+        ChatPanel.currentPanel = new ChatPanel(panel, context, localAI, indexer, privacyGuard);
+    }
+
+    public addMessage(type: string, input: string, response: string) {
+        this.messages.push({ role: 'user', content: `/${type}: ${input}` });
+        this.messages.push({ role: 'assistant', content: response });
+        
+        this._panel.webview.postMessage({ 
+            type: 'addMessage', 
+            role: 'user', 
+            content: `/${type}: ${input}` 
+        });
+        
+        this._panel.webview.postMessage({ 
+            type: 'addMessage', 
+            role: 'assistant', 
+            content: response 
+        });
+        
+        this.saveChatHistory();
+    }
+
+    private async handleUserMessage(text: string) {
+        // Add user message
+        this.messages.push({ role: 'user', content: text });
+        this._panel.webview.postMessage({ 
+            type: 'addMessage', 
+            role: 'user', 
+            content: text 
+        });
+
+        // Show typing indicator
+        this._panel.webview.postMessage({ type: 'showTyping' });
+
+        try {
+            // Get current editor context
+            const editor = vscode.window.activeTextEditor;
+            let context = '';
+            
+            if (editor) {
+                const selection = editor.selection;
+                const selectedText = editor.document.getText(selection);
+                const fileName = editor.document.fileName;
+                
+                context = `Current file: ${fileName}\n`;
+                if (selectedText) {
+                    context += `Selected code:\n\`\`\`${editor.document.languageId}\n${selectedText}\n\`\`\`\n`;
+                }
+            }
+
+            // Check for commands
+            if (text.startsWith('/')) {
+                await this.handleCommand(text, context);
+            } else {
+                // Regular chat
+                const response = await this.localAI.chat(text, context);
+                this.messages.push({ role: 'assistant', content: response });
+                this._panel.webview.postMessage({ 
+                    type: 'addMessage', 
+                    role: 'assistant', 
+                    content: response 
+                });
+            }
+        } catch (error) {
+            const errorMsg = `Error: ${error}`;
+            this._panel.webview.postMessage({ 
+                type: 'addMessage', 
+                role: 'assistant', 
+                content: errorMsg 
+            });
+        }
+
+        // Hide typing indicator
+        this._panel.webview.postMessage({ type: 'hideTyping' });
+        
+        // Save chat history
+        this.saveChatHistory();
+    }
+
+    private async handleCommand(command: string, context: string) {
+        const [cmd, ...args] = command.split(' ');
+        const editor = vscode.window.activeTextEditor;
+        
+        switch (cmd) {
+            case '/explain':
+                if (editor) {
+                    const selectedText = editor.document.getText(editor.selection);
+                    if (selectedText) {
+                        const explanation = await this.localAI.explainCode(selectedText, context);
+                        this.messages.push({ role: 'assistant', content: explanation });
+                        this._panel.webview.postMessage({ 
+                            type: 'addMessage', 
+                            role: 'assistant', 
+                            content: explanation 
+                        });
+                    } else {
+                        this._panel.webview.postMessage({ 
+                            type: 'addMessage', 
+                            role: 'assistant', 
+                            content: 'Please select some code first!' 
+                        });
+                    }
+                }
+                break;
+                
+            case '/refactor':
+                if (editor) {
+                    const selectedText = editor.document.getText(editor.selection);
+                    if (selectedText) {
+                        const instruction = args.join(' ') || 'improve this code';
+                        const refactored = await this.localAI.refactorCode(
+                            selectedText,
+                            instruction,
+                            context
+                        );
+                        const response = `Here's the refactored code:\n\n\`\`\`${editor.document.languageId}\n${refactored}\n\`\`\``;
+                        this.messages.push({ role: 'assistant', content: response });
+                        this._panel.webview.postMessage({ 
+                            type: 'addMessage', 
+                            role: 'assistant', 
+                            content: response 
+                        });
+                    }
+                }
+                break;
+                
+            case '/test':
+                if (editor) {
+                    const selectedText = editor.document.getText(editor.selection) || editor.document.getText();
+                    const tests = await this.localAI.generateTests(selectedText, context);
+                    const response = `Generated tests:\n\n\`\`\`${editor.document.languageId}\n${tests}\n\`\`\``;
+                    this.messages.push({ role: 'assistant', content: response });
+                    this._panel.webview.postMessage({ 
+                        type: 'addMessage', 
+                        role: 'assistant', 
+                        content: response 
+                    });
+                }
+                break;
+                
+            case '/help':
+                const helpText = `Available commands:
+- **/explain** - Explain selected code
+- **/refactor [instruction]** - Refactor selected code
+- **/test** - Generate tests for selected code
+- **/help** - Show this help message
+
+You can also just chat naturally about your code!`;
+                this.messages.push({ role: 'assistant', content: helpText });
+                this._panel.webview.postMessage({ 
+                    type: 'addMessage', 
+                    role: 'assistant', 
+                    content: helpText 
+                });
+                break;
+                
+            default:
+                this._panel.webview.postMessage({ 
+                    type: 'addMessage', 
+                    role: 'assistant', 
+                    content: `Unknown command: ${cmd}. Type /help for available commands.` 
+                });
+        }
+    }
+
+    private insertCodeAtCursor(code: string) {
+        const editor = vscode.window.activeTextEditor;
+        if (editor) {
+            editor.edit(editBuilder => {
+                editBuilder.insert(editor.selection.active, code);
+            });
+        }
+    }
+
+    private saveChatHistory() {
+        this.context.globalState.update('chatHistory', this.messages.slice(-100));
+    }
+
+    private loadChatHistory() {
+        const saved = this.context.globalState.get<Array<{role: string, content: string}>>('chatHistory');
+        if (saved) {
+            this.messages = saved;
+            saved.forEach(msg => {
+                this._panel.webview.postMessage({ 
+                    type: 'addMessage', 
+                    role: msg.role, 
+                    content: msg.content 
+                });
+            });
+        }
+    }
+
+    // Replace the _getWebviewContent() method in your ChatPanel class with this fixed version:
+
+private _getWebviewContent() {
+    return `<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';">
+        <title>Sidekick AI Chat</title>
+        <style>
+            body {
+                font-family: var(--vscode-font-family);
+                font-size: var(--vscode-font-size);
+                color: var(--vscode-foreground);
+                background-color: var(--vscode-editor-background);
+                margin: 0;
+                padding: 0;
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+            }
+            
+            .chat-container {
+                display: flex;
+                flex-direction: column;
+                height: 100%;
+            }
+            
+            .chat-header {
+                padding: 10px 15px;
+                background: var(--vscode-titleBar-activeBackground);
+                border-bottom: 1px solid var(--vscode-panel-border);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
+            
+            .messages-container {
+                flex: 1;
+                overflow-y: auto;
+                padding: 15px;
+                display: flex;
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .message {
+                display: flex;
+                gap: 10px;
+                animation: slideIn 0.3s ease;
+            }
+            
+            @keyframes slideIn {
+                from {
+                    opacity: 0;
+                    transform: translateY(10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            
+            .message.user {
+                flex-direction: row-reverse;
+            }
+            
+            .avatar {
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 16px;
+                flex-shrink: 0;
+            }
+            
+            .user .avatar {
+                background: var(--vscode-button-background);
+            }
+            
+            .assistant .avatar {
+                background: var(--vscode-activityBarBadge-background);
+            }
+            
+            .message-content {
+                background: var(--vscode-input-background);
+                padding: 10px 15px;
+                border-radius: 10px;
+                max-width: 70%;
+                word-wrap: break-word;
+            }
+            
+            .user .message-content {
+                background: var(--vscode-button-background);
+                color: var(--vscode-button-foreground);
+            }
+            
+            pre {
+                background: var(--vscode-textCodeBlock-background);
+                border: 1px solid var(--vscode-panel-border);
+                border-radius: 4px;
+                padding: 10px;
+                overflow-x: auto;
+                margin: 10px 0;
+            }
+            
+            code {
+                font-family: var(--vscode-editor-font-family);
+                font-size: var(--vscode-editor-font-size);
+            }
+            
+            .code-actions {
+                display: flex;
+                gap: 8px;
+                margin-top: 8px;
+            }
+            
+            .code-action {
+                padding: 4px 8px;
+                background: var(--vscode-button-secondaryBackground);
+                color: var(--vscode-button-secondaryForeground);
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 12px;
+            }
+            
+            .code-action:hover {
+                background: var(--vscode-button-secondaryHoverBackground);
+            }
+            
+            .input-container {
+                padding: 15px;
+                border-top: 1px solid var(--vscode-panel-border);
+                display: flex;
+                gap: 10px;
+            }
+            
+            .chat-input {
+                flex: 1;
+                background: var(--vscode-input-background);
+                color: var(--vscode-input-foreground);
+                border: 1px solid var(--vscode-input-border);
+                padding: 8px 12px;
+                border-radius: 4px;
+                font-family: inherit;
+                font-size: inherit;
+                resize: none;
+                min-height: 36px;
+                max-height: 120px;
+            }
+            
+            .chat-input:focus {
+                outline: none;
+                border-color: var(--vscode-focusBorder);
+            }
+            
+            .send-button {
+                background: var(--vscode-button-background);
+                color: var(--vscode-button-foreground);
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: 600;
+            }
+            
+            .send-button:hover {
+                background: var(--vscode-button-hoverBackground);
+            }
+            
+            .typing-indicator {
+                display: none;
+                padding: 10px;
+                font-style: italic;
+                opacity: 0.7;
+            }
+            
+            .typing-indicator.show {
+                display: block;
+            }
+            
+            .welcome-message {
+                text-align: center;
+                padding: 40px 20px;
+                opacity: 0.8;
+            }
+            
+            .quick-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 8px;
+                justify-content: center;
+                margin-top: 20px;
+            }
+            
+            .quick-action {
+                padding: 8px 16px;
+                background: var(--vscode-button-secondaryBackground);
+                color: var(--vscode-button-secondaryForeground);
+                border: 1px solid var(--vscode-button-border);
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 13px;
+            }
+            
+            .quick-action:hover {
+                background: var(--vscode-button-secondaryHoverBackground);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="chat-container">
+            <div class="chat-header">
+                <span style="font-weight: 600;">🤖 Sidekick AI Chat</span>
+                <button class="code-action" onclick="clearChat()">Clear</button>
+            </div>
+            
+            <div class="messages-container" id="messages">
+                <div class="welcome-message" id="welcome">
+                    <h2>👋 Welcome to Sidekick AI</h2>
+                    <p>Your local AI coding assistant</p>
+                    <div class="quick-actions">
+                        <button class="quick-action" onclick="sendMessage('/help')">View Commands</button>
+                        <button class="quick-action" onclick="sendMessage('/explain')">Explain Code</button>
+                        <button class="quick-action" onclick="sendMessage('/test')">Generate Tests</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="typing-indicator" id="typing">
+                <div class="message assistant">
+                    <div class="avatar">🤖</div>
+                    <div class="message-content">Thinking...</div>
+                </div>
+            </div>
+            
+            <div class="input-container">
+                <textarea 
+                    class="chat-input" 
+                    id="input" 
+                    placeholder="Ask me anything or use / for commands..."
+                ></textarea>
+                <button class="send-button" onclick="sendCurrentMessage()">Send</button>
+            </div>
+        </div>
+        
+        <script>
+            const vscode = acquireVsCodeApi();
+            const messagesContainer = document.getElementById('messages');
+            const inputField = document.getElementById('input');
+            const typingIndicator = document.getElementById('typing');
+            const welcomeMessage = document.getElementById('welcome');
+            
+            // Define handleKeyPress function
+            function handleKeyPress(event) {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    sendCurrentMessage();
+                }
+            }
+            
+            // Add event listener for keypress
+            inputField.addEventListener('keydown', handleKeyPress);
+            
+            function sendMessage(text) {
+                if (!text || !text.trim()) return;
+                
+                // Hide welcome message
+                if (welcomeMessage) {
+                    welcomeMessage.style.display = 'none';
+                }
+                
+                vscode.postMessage({ type: 'sendMessage', text: text.trim() });
+                inputField.value = '';
+                autoResizeInput();
+            }
+            
+            function sendCurrentMessage() {
+                sendMessage(inputField.value);
+            }
+            
+            function clearChat() {
+                vscode.postMessage({ type: 'clear' });
+                messagesContainer.innerHTML = '';
+                if (welcomeMessage) {
+                    messagesContainer.appendChild(welcomeMessage);
+                    welcomeMessage.style.display = 'block';
+                }
+            }
+            
+            function copyCode(code) {
+                vscode.postMessage({ type: 'copyCode', code: code });
+            }
+            
+            function insertCode(code) {
+                vscode.postMessage({ type: 'insertCode', code: code });
+            }
+            
+            function autoResizeInput() {
+                inputField.style.height = 'auto';
+                inputField.style.height = Math.min(inputField.scrollHeight, 120) + 'px';
+            }
+            
+            inputField.addEventListener('input', autoResizeInput);
+            
+            window.addEventListener('message', event => {
+                const message = event.data;
+                
+                switch (message.type) {
+                    case 'addMessage':
+                        addMessage(message.role, message.content);
+                        break;
+                    case 'clearMessages':
+                        messagesContainer.innerHTML = '';
+                        break;
+                    case 'showTyping':
+                        typingIndicator.classList.add('show');
+                        break;
+                    case 'hideTyping':
+                        typingIndicator.classList.remove('show');
+                        break;
+                }
+            });
+            
+            function addMessage(role, content) {
+                // Hide welcome message
+                if (welcomeMessage) {
+                    welcomeMessage.style.display = 'none';
+                }
+                
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message ' + role;
+                
+                const avatar = document.createElement('div');
+                avatar.className = 'avatar';
+                avatar.textContent = role === 'user' ? '👤' : '🤖';
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'message-content';
+                
+                // Simple parsing for code blocks - avoiding regex issues
+                if (content.includes('\`\`\`')) {
+                    // Split by code blocks
+                    const parts = content.split('\`\`\`');
+                    for (let i = 0; i < parts.length; i++) {
+                        if (i % 2 === 0) {
+                            // Regular text
+                            if (parts[i]) {
+                                const textSpan = document.createElement('span');
+                                textSpan.innerHTML = parts[i].replace(/\\n/g, '<br>');
+                                contentDiv.appendChild(textSpan);
+                            }
+                        } else {
+                            // Code block
+                            const codeContent = parts[i];
+                            const lines = codeContent.split('\\n');
+                            const language = lines[0];
+                            const code = lines.slice(1).join('\\n');
+                            
+                            const pre = document.createElement('pre');
+                            const codeElement = document.createElement('code');
+                            codeElement.textContent = code || codeContent;
+                            pre.appendChild(codeElement);
+                            contentDiv.appendChild(pre);
+                            
+                            // Add code actions for assistant messages
+                            if (role === 'assistant') {
+                                const actions = document.createElement('div');
+                                actions.className = 'code-actions';
+                                
+                                const copyBtn = document.createElement('button');
+                                copyBtn.className = 'code-action';
+                                copyBtn.textContent = 'Copy';
+                                copyBtn.onclick = () => copyCode(code || codeContent);
+                                
+                                const insertBtn = document.createElement('button');
+                                insertBtn.className = 'code-action';
+                                insertBtn.textContent = 'Insert at Cursor';
+                                insertBtn.onclick = () => insertCode(code || codeContent);
+                                
+                                actions.appendChild(copyBtn);
+                                actions.appendChild(insertBtn);
+                                contentDiv.appendChild(actions);
+                            }
+                        }
+                    }
+                } else {
+                    // No code blocks, just regular text
+                    const textSpan = document.createElement('span');
+                    textSpan.innerHTML = content.replace(/\\n/g, '<br>');
+                    contentDiv.appendChild(textSpan);
+                }
+                
+                messageDiv.appendChild(avatar);
+                messageDiv.appendChild(contentDiv);
+                messagesContainer.appendChild(messageDiv);
+                
+                // Scroll to bottom
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+        </script>
+    </body>
+    </html>`;
+}
+
+    public dispose() {
+        ChatPanel.currentPanel = undefined;
+        this._panel.dispose();
+        
+        while (this._disposables.length) {
+            const disposable = this._disposables.pop();
+            if (disposable) {
+                disposable.dispose();
+            }
+        }
+    }
+}
 
 export async function activate(context: vscode.ExtensionContext) {
   console.log("Privacy-First Copilot is starting...");
@@ -15,6 +701,13 @@ export async function activate(context: vscode.ExtensionContext) {
   // Check for local model availability
   const localAI = new LocalAIProvider(context);
   const modelStatus = await localAI.checkModelStatus();
+
+//   let statusBarItem: vscode.StatusBarItem;
+
+// // In activate function
+// statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+// statusBarItem.text = "$(sparkle) AI Ready";
+// context.subscriptions.push(statusBarItem);
 
   if (!modelStatus.isReady) {
     const download = await vscode.window.showInformationMessage(
@@ -41,6 +734,21 @@ export async function activate(context: vscode.ExtensionContext) {
   const indexer = new CodeIndexer(context);
   await indexer.indexWorkspace();
 
+  // Create chat panel reference for other commands to use
+  let chatPanel: ChatPanel | undefined;
+
+  // Simple command to open chat as a side panel
+    const openChatCommand = vscode.commands.registerCommand('sidekick-ai.openChat', () => {
+        ChatPanel.createOrShow(context, localAI, indexer, privacyGuard);
+        chatPanel = ChatPanel.currentPanel;
+    });
+    
+    context.subscriptions.push(openChatCommand);
+
+  // Initialize code indexer for context awareness
+  // const indexer = new CodeIndexer(context);
+  // await indexer.indexWorkspace();
+
   // Register inline completion provider
   const inlineProvider = new InlineCompletionProvider(
     localAI,
@@ -53,16 +761,26 @@ export async function activate(context: vscode.ExtensionContext) {
       inlineProvider
     );
 
-  // Register chat sidebar
-  const chatProvider = new ChatViewProvider(
-    context,
-    localAI,
-    indexer,
-    privacyGuard
-  );
-  context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider("sidekick-ai-chat", chatProvider)
-  );
+  // // Register chat sidebar
+  // const chatProvider = new ChatViewProvider(
+  //   context.extensionUri,
+  //   context,
+  //   localAI,
+  //   indexer,
+  //   privacyGuard
+  // );
+  // context.subscriptions.push(
+  //   vscode.window.registerWebviewViewProvider(
+  //     "sidekick-ai.chatView",
+  //     chatProvider
+  //   )
+  // );
+  // // Register commands for the chat
+  //   context.subscriptions.push(
+  //       vscode.commands.registerCommand('sidekick-ai.openChat', () => {
+  //           vscode.commands.executeCommand('workbench.view.extension.sidekick-ai-sidebar');
+  //       })
+  //   );
 
   // Register commands
   context.subscriptions.push(
@@ -71,54 +789,57 @@ export async function activate(context: vscode.ExtensionContext) {
       if (!editor) return;
 
       const selection = editor.selection;
-    const selectedText = editor.document.getText(selection);
-    
-    if (!selectedText) {
-      vscode.window.showInformationMessage("Please select code to explain");
-      return;
-    }
+      const selectedText = editor.document.getText(selection);
+
+      if (!selectedText) {
+        vscode.window.showInformationMessage("Please select code to explain");
+        return;
+      }
 
       // Show loading indicator
-    const loadingDecoration = vscode.window.createTextEditorDecorationType({
+      const loadingDecoration = vscode.window.createTextEditorDecorationType({
         after: {
-          contentText: '  🔄 Getting AI explanation...',
-          color: 'rgba(255, 255, 255, 0.5)',
-          fontStyle: 'italic'
-        }
+          contentText: "  🔄 Getting AI explanation...",
+          color: "rgba(255, 255, 255, 0.5)",
+          fontStyle: "italic",
+        },
       });
-      
-      editor.setDecorations(loadingDecoration, [{
-        range: new vscode.Range(selection.end, selection.end)
-      }]);
-  
+
+      editor.setDecorations(loadingDecoration, [
+        {
+          range: new vscode.Range(selection.end, selection.end),
+        },
+      ]);
+
       // Get explanation
       const explanation = await localAI.explainCode(
         selectedText,
         indexer.getContext()
       );
-  
+
       // Clear loading
       editor.setDecorations(loadingDecoration, []);
       loadingDecoration.dispose();
-  
+
       // Create inline explanation decoration
-      const explanationDecoration = vscode.window.createTextEditorDecorationType({
-        isWholeLine: false,
-        after: {
-          contentText: '',  // We'll use hover for full text
-          textDecoration: 'none'
-        },
-        // Highlight the selected code
-        backgroundColor: 'rgba(65, 105, 225, 0.1)',
-        border: '1px solid rgba(65, 105, 225, 0.3)',
-        borderRadius: '3px'
-      });
-  
+      const explanationDecoration =
+        vscode.window.createTextEditorDecorationType({
+          isWholeLine: false,
+          after: {
+            contentText: "", // We'll use hover for full text
+            textDecoration: "none",
+          },
+          // Highlight the selected code
+          backgroundColor: "rgba(65, 105, 225, 0.1)",
+          border: "1px solid rgba(65, 105, 225, 0.3)",
+          borderRadius: "3px",
+        });
+
       // Create rich hover content
-      const hoverMessage = new vscode.MarkdownString('', true);
+      const hoverMessage = new vscode.MarkdownString("", true);
       hoverMessage.isTrusted = true;
       hoverMessage.supportHtml = true;
-      
+
       // Format explanation nicely
       hoverMessage.appendMarkdown(`
   <div style="padding: 10px; max-width: 600px;">
@@ -132,42 +853,52 @@ export async function activate(context: vscode.ExtensionContext) {
   
   </div>
       `);
-  
+
       // Apply decoration with hover
       const decoration: vscode.DecorationOptions = {
         range: selection,
         hoverMessage: hoverMessage,
         renderOptions: {
           after: {
-            contentText: ` // AI: ${explanation.split('\n')[0].substring(0, 50)}...`,
-            color: 'rgba(106, 153, 85, 0.6)',
-            fontStyle: 'italic',
-            margin: '0 0 0 10px'
-          }
-        }
+            contentText: ` // AI: ${explanation
+              .split("\n")[0]
+              .substring(0, 50)}...`,
+            color: "rgba(106, 153, 85, 0.6)",
+            fontStyle: "italic",
+            margin: "0 0 0 10px",
+          },
+        },
       };
-  
+
       editor.setDecorations(explanationDecoration, [decoration]);
-  
+
       // Auto-clear after 30 seconds
       setTimeout(() => {
         editor.setDecorations(explanationDecoration, []);
         explanationDecoration.dispose();
       }, 30000);
-  
+
       // Show notification
-      vscode.window.showInformationMessage(
-        'AI explanation added inline. Hover to see full explanation.',
-        'Clear'
-      ).then(action => {
-        if (action === 'Clear') {
-          editor.setDecorations(explanationDecoration, []);
-          explanationDecoration.dispose();
-        }
-      });
-  
+      vscode.window
+        .showInformationMessage(
+          "AI explanation added inline. Hover to see full explanation.",
+          "Clear"
+        )
+        .then((action) => {
+          if (action === "Clear") {
+            editor.setDecorations(explanationDecoration, []);
+            explanationDecoration.dispose();
+          } else if (action === "Open Chat") {
+            ChatPanel.createOrShow(context, localAI, indexer, privacyGuard);
+            chatPanel = ChatPanel.currentPanel;
+            if (chatPanel) {
+              chatPanel.addMessage("explain", selectedText, explanation);
+            }
+          }
+        });
+
       // Still add to chat
-      chatProvider.addMessage("explain", selectedText, explanation);
+      // chatProvider.addMessage("explain", selectedText, explanation);
     }),
 
     vscode.commands.registerCommand("sidekick-ai.refactor", async () => {
@@ -193,6 +924,30 @@ export async function activate(context: vscode.ExtensionContext) {
         editBuilder.replace(editor.selection, refactored);
       });
     }),
+
+    vscode.commands.registerCommand(
+      "sidekick-ai.triggerCompletion",
+      async () => {
+        await vscode.commands.executeCommand(
+          "editor.action.inlineSuggest.trigger"
+        );
+      }
+    ),
+
+    vscode.commands.registerCommand(
+      "sidekick-ai.acceptedCompletion",
+      (completion: string) => {
+        console.log("User accepted completion:", completion);
+        vscode.window.setStatusBarMessage("✅ AI suggestion accepted", 2000);
+
+        // Track acceptance rate
+        const acceptances = context.globalState.get(
+          "completionAcceptances",
+          0
+        ) as number;
+        context.globalState.update("completionAcceptances", acceptances + 1);
+      }
+    ),
 
     vscode.commands.registerCommand("sidekick-ai.generateTests", async () => {
       const editor = vscode.window.activeTextEditor;
@@ -234,38 +989,38 @@ export async function activate(context: vscode.ExtensionContext) {
     })
   );
   // Add hover provider for automatic explanations
-const hoverProvider = vscode.languages.registerHoverProvider(
-    { pattern: '**/*' },
+  const hoverProvider = vscode.languages.registerHoverProvider(
+    { pattern: "**/*" },
     {
       async provideHover(document, position, token) {
         const editor = vscode.window.activeTextEditor;
         if (!editor) return;
-        
+
         const selection = editor.selection;
-        
+
         // Only show if hovering over selected text
         if (selection.isEmpty || !selection.contains(position)) {
           return;
         }
-        
+
         const selectedText = document.getText(selection);
-        
+
         // Get cached explanation or generate new one
         const explanation = await localAI.explainCode(
           selectedText,
           indexer.getContext()
         );
-        
+
         const markdown = new vscode.MarkdownString();
         markdown.isTrusted = true;
         markdown.supportHtml = true;
         markdown.appendMarkdown(`### 🤖 AI Explanation\n\n${explanation}`);
-        
+
         return new vscode.Hover(markdown, selection);
-      }
+      },
     }
   );
-  
+
   context.subscriptions.push(hoverProvider);
 
   // Register status bar item

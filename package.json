@@ -22,6 +22,11 @@
   "contributes": {
     "commands": [
       {
+        "command": "sidekick-ai.openChat",
+        "title": "Open Chat",
+        "category": "sidekick AI"
+      },
+      {
         "command": "sidekick-ai.explain",
         "title": "Explain Code (Local AI)",
         "icon": "$(comment-discussion)"
@@ -45,9 +50,19 @@
         "command": "sidekick-ai.switchModel",
         "title": "Switch AI Model",
         "icon": "$(server)"
+      },
+      {
+      "command": "sidekick-ai.triggerCompletion",
+      "title": "Trigger AI Completion"
       }
     ],
     "keybindings": [
+      {
+        "command": "sidekick-ai.openChat",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a",
+        "when": "editorTextFocus"
+      },
       {
         "command": "sidekick-ai.explain",
         "key": "ctrl+shift+e",
@@ -59,6 +74,12 @@
         "key": "ctrl+shift+r",
         "mac": "cmd+shift+r",
         "when": "editorTextFocus && editorHasSelection"
+      },
+      {
+      "command": "sidekick-ai.triggerCompletion",
+      "key": "ctrl+space",
+      "mac": "cmd+space",
+      "when": "editorTextFocus"
       }
     ],
     "viewsContainers": {
@@ -66,18 +87,19 @@
         {
           "id": "sidekick-ai",
           "title": "sidekick-ai",
-          "icon": "$(shield)"
+          "icon": "resource/icon.svg"
         }
       ]
     },
     "views": {
-      "sidekick-ai": [
+      "explorer": [
         {
           "type": "webview",
-          "id": "sidekick-ai-chat",
-          "name": "Local AI Chat",
+          "id": "sidekick-ai.chatView",
+          "name": "Sidekick AI Chat",
           "icon": "$(comment-discussion)",
-          "contextualTitle": "Local AI Chat"
+          "visibility": "visible",
+          "when": "true"
         }
       ]
     },
@@ -132,7 +154,22 @@
             "**/secrets/**"
           ],
           "description": "File patterns to exclude from indexing"
-        }
+        },
+        "sidekick-ai.completions.enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable/disable inline completions"
+      },
+      "sidekick-ai.completions.delay": {
+        "type": "number",
+        "default": 500,
+        "description": "Delay in ms before showing completions"
+      },
+      "sidekick-ai.completions.maxLength": {
+        "type": "number",
+        "default": 150,
+        "description": "Maximum length of completions in characters"
+      }
       }
     },
     "menus": {

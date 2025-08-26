@@ -8,6 +8,12 @@ export class CodeIndexer {
     }
     
     async indexFile(uri: vscode.Uri) {
+        if (uri.fsPath.includes('node_modules') || 
+        uri.fsPath.includes('.git') ||
+        uri.fsPath.includes('dist') ||
+        uri.fsPath.includes('build')) {
+        return;
+    }
         console.log('Indexing file:', uri.fsPath);
     }
     
