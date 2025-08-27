@@ -2,7 +2,7 @@
   "name": "sidekick-ai",
   "displayName": "Sidekick AI - Local Coding Assistant",
   "description": "Privacy-focused AI coding assistant that runs 100% locally on your machine",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "NaveenBabu",
   "engines": {
     "vscode": "^1.85.0"
@@ -25,7 +25,9 @@
     "github copilot",
     "code completion"
   ],
-  "activationEvents": ["onStartupFinished"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -64,8 +66,8 @@
         "icon": "$(server)"
       },
       {
-      "command": "sidekick-ai.triggerCompletion",
-      "title": "Trigger AI Completion"
+        "command": "sidekick-ai.triggerCompletion",
+        "title": "Trigger AI Completion"
       }
     ],
     "keybindings": [
@@ -88,10 +90,10 @@
         "when": "editorTextFocus && editorHasSelection"
       },
       {
-      "command": "sidekick-ai.triggerCompletion",
-      "key": "ctrl+space",
-      "mac": "cmd+space",
-      "when": "editorTextFocus"
+        "command": "sidekick-ai.triggerCompletion",
+        "key": "ctrl+space",
+        "mac": "cmd+space",
+        "when": "editorTextFocus"
       }
     ],
     "viewsContainers": {
@@ -118,6 +120,36 @@
     "configuration": {
       "title": "sidekick-ai Copilot",
       "properties": {
+        "sidekick-ai.modelPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to your GGUF model file (e.g., qwen2.5-coder-1.5b-instruct-q4_k_m.gguf)"
+        },
+        "sidekick-ai.llamaPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to llama-server executable (auto-detected if not set)"
+        },
+        "sidekick-ai.port": {
+          "type": "number",
+          "default": 8080,
+          "description": "Port for llama.cpp server"
+        },
+        "sidekick-ai.contextSize": {
+          "type": "number",
+          "default": 4096,
+          "description": "Context window size for the model"
+        },
+        "sidekick-ai.useGpu": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use GPU acceleration if available (requires CUDA/Metal)"
+        },
+        "sidekick-ai.autoStart": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically start llama.cpp server"
+        },
         "sidekick-ai.modelName": {
           "type": "string",
           "default": "deepseek-coder:6.7b",
@@ -168,24 +200,24 @@
           "description": "File patterns to exclude from indexing"
         },
         "sidekick-ai.completions.enabled": {
-        "type": "boolean",
-        "default": true,
-        "description": "Enable/disable inline completions"
-      },
-      "sidekick-ai.completions.delay": {
-        "type": "number",
-        "default": 500,
-        "description": "Delay in ms before showing completions"
-      },
-      "sidekick-ai.completions.maxLength": {
-        "type": "number",
-        "default": 150,
-        "description": "Maximum length of completions in characters"
-      }
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable inline completions"
+        },
+        "sidekick-ai.completions.delay": {
+          "type": "number",
+          "default": 500,
+          "description": "Delay in ms before showing completions"
+        },
+        "sidekick-ai.completions.maxLength": {
+          "type": "number",
+          "default": 150,
+          "description": "Maximum length of completions in characters"
+        }
       }
     },
     "menus": {
-       "editor/title": [
+      "editor/title": [
         {
           "command": "sidekick-ai.openChat",
           "group": "navigation",
@@ -255,7 +287,7 @@
     "natural": "^8.1.0",
     "vectra": "^0.11.1"
   },
-  "icon": "resources/icon.png",  
+  "icon": "resources/icon.png",
   "galleryBanner": {
     "color": "#2b2b2b",
     "theme": "dark"
