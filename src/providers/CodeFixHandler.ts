@@ -20,19 +20,24 @@ export class CodeFixHandler {
     const fullFileContent = document.getText();
     const errorText = document.getText(diagnostic.range);
     const errorLine = diagnostic.range.start.line;
-    
+
+    // Find the containing code block (function, object, etc.)
+    const blockRange = this.findContainingBlock(document, errorLine);
+    const blockText = document.getText(blockRange);
+
     // Prepare prompt for AI
-    const prompt = `Fix this ${document.languageId} code error:
+    const prompt = `Fix the errors in this code block:
 
-Error message: ${diagnostic.message}
-Error location: Line ${errorLine + 1}
-Error text: "${errorText}"
+\`\`\`${document.languageId}
+${blockText}
+\`\`\`
 
-Code context:
+Error: ${diagnostic.message} at line ${errorLine + 1}
+
+Full file context:
 \`\`\`${document.languageId}
 ${fullFileContent}
 \`\`\`
-
 Analyze the entire file context and provide ONLY the fixed code that should replace "${errorText}". Do not include explanations, just the corrected code:`;
 
     try {
@@ -68,20 +73,105 @@ Analyze the entire file context and provide ONLY the fixed code that should repl
       }
 
       // Create a preview panel to show the fix
-      this.showFixPreview(editor, diagnostic.range, fix, errorText);
+      this.showFixPreview(editor, blockRange, fix, blockText);
     } catch (error) {
       vscode.window.showErrorMessage(`Failed to fix: ${error}`);
     }
   }
 
+  // Helper to find the containing code block
+  private findContainingBlock(
+    document: vscode.TextDocument,
+    errorLine: number
+  ): vscode.Range {
+    let startLine = errorLine;
+    let endLine = errorLine;
+    let braceCount = 0;
+    let foundStart = false;
+
+    // Search backwards for block start
+    for (let i = errorLine; i >= 0; i--) {
+      const line = document.lineAt(i).text;
+
+      // Count braces going backwards
+      for (let j = line.length - 1; j >= 0; j--) {
+        if (line[j] === "}") braceCount++;
+        if (line[j] === "{") {
+          braceCount--;
+          if (braceCount === -1) {
+            startLine = i;
+            foundStart = true;
+            break;
+          }
+        }
+      }
+
+      if (foundStart) break;
+
+      // Also check for function/const/let/var declarations
+      if (line.match(/^\s*(function|const|let|var|class|interface)\s+\w+/)) {
+        startLine = i;
+        break;
+      }
+    }
+
+    // Search forwards for block end
+    braceCount = 0;
+    let foundEnd = false;
+
+    for (let i = startLine; i < document.lineCount; i++) {
+      const line = document.lineAt(i).text;
+
+      for (let j = 0; j < line.length; j++) {
+        if (line[j] === "{") braceCount++;
+        if (line[j] === "}") {
+          braceCount--;
+          if (braceCount === 0 && i > startLine) {
+            endLine = i;
+            foundEnd = true;
+            break;
+          }
+        }
+      }
+
+      if (foundEnd) break;
+    }
+
+    // If we have a semicolon after the closing brace, include it
+    if (endLine < document.lineCount - 1) {
+      const nextLine = document.lineAt(endLine + 1).text.trim();
+      if (nextLine.startsWith(";")) {
+        endLine++;
+      }
+    }
+
+    return new vscode.Range(
+      startLine,
+      0,
+      endLine,
+      document.lineAt(endLine).text.length
+    );
+  }
+
   private showFixPreview(
     editor: vscode.TextEditor,
-    errorRange: vscode.Range,
+    replaceRange: vscode.Range,
     fixedCode: string,
     originalCode: string
   ) {
     // Store document URI to get fresh editor later
     const documentUri = editor.document.uri;
+
+    const documentVersion = editor.document.version;
+    
+    // Store the range in closure so it can't be changed
+    const rangeToReplace = new vscode.Range(
+        replaceRange.start.line,
+        replaceRange.start.character,
+        replaceRange.end.line,
+        replaceRange.end.character
+    );
+
     // Create a webview panel to show the fix preview
     const panel = vscode.window.createWebviewPanel(
       "sidekickFix",
@@ -97,37 +187,37 @@ Analyze the entire file context and provide ONLY the fixed code that should repl
 
     // Handle messages from the webview
     panel.webview.onDidReceiveMessage(
-      async message => {
-            switch (message.command) {
-                case 'accept':
-                    // Get FRESH editor reference
-                    const currentEditor = vscode.window.visibleTextEditors.find(
-                        e => e.document.uri.toString() === documentUri.toString()
-                    );
-                    
-                    if (!currentEditor) {
-                        vscode.window.showErrorMessage('Original editor not found');
-                        panel.dispose();
-                        return;
-                    }
-                    
-                    // Apply fix to the specific range
-                    const success = await currentEditor.edit(editBuilder => {
-                        editBuilder.replace(errorRange, fixedCode);
-                    });
-                    
-                    if (success) {
-                        vscode.window.showInformationMessage('Fix applied!');
-                    } else {
-                        vscode.window.showErrorMessage('Failed to apply fix');
-                    }
-                    
-                    panel.dispose();
-                    break;
-                    
-                case 'reject':
-                    panel.dispose();
-                    break;
+      async (message) => {
+        switch (message.command) {
+          case "accept":
+            // Get FRESH editor reference
+            const currentEditor = vscode.window.visibleTextEditors.find(
+              (e) => e.document.uri.toString() === documentUri.toString()
+            );
+
+            if (!currentEditor) {
+              vscode.window.showErrorMessage("Original editor not found");
+              panel.dispose();
+              return;
+            }
+
+            // Apply fix to the specific range
+            const success = await currentEditor.edit((editBuilder) => {
+              editBuilder.replace(rangeToReplace, fixedCode);
+            });
+
+            if (success) {
+              vscode.window.showInformationMessage("Fix applied!");
+            } else {
+              vscode.window.showErrorMessage("Failed to apply fix");
+            }
+
+            panel.dispose();
+            break;
+
+          case "reject":
+            panel.dispose();
+            break;
         }
       },
       undefined,
