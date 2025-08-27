@@ -928,26 +928,9 @@ export async function activate(context: vscode.ExtensionContext) {
       inlineProvider
     );
 
-  // // Register chat sidebar
-  // const chatProvider = new ChatViewProvider(
-  //   context.extensionUri,
-  //   context,
-  //   localAI,
-  //   indexer,
-  //   privacyGuard
-  // );
-  // context.subscriptions.push(
-  //   vscode.window.registerWebviewViewProvider(
-  //     "sidekick-ai.chatView",
-  //     chatProvider
-  //   )
-  // );
-  // // Register commands for the chat
-  //   context.subscriptions.push(
-  //       vscode.commands.registerCommand('sidekick-ai.openChat', () => {
-  //           vscode.commands.executeCommand('workbench.view.extension.sidekick-ai-sidebar');
-  //       })
-  //   );
+    context.subscriptions.push({
+        dispose: () => localAI.dispose()
+    });
 
   // Register commands
   context.subscriptions.push(
