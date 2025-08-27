@@ -922,43 +922,37 @@ export async function activate(context: vscode.ExtensionContext) {
           return;
         }
 
-        // Get the error context
-        const errorLine = diagnostic.range.start.line;
-        const errorText = document.getText(diagnostic.range);
-        const fullLine = document.lineAt(errorLine).text;
-
-        // Get surrounding context
-        const startLine = Math.max(0, errorLine - 5);
-        const endLine = Math.min(document.lineCount - 1, errorLine + 5);
-        const context = document.getText(
-          new vscode.Range(startLine, 0, endLine + 1, 0)
-        );
-
-        const prompt = `Fix this ${document.languageId} code error in one line.
+        // Use FULL file as context
+            const fullFileContent = document.getText();
+            const errorText = document.getText(diagnostic.range);
+            
+            const prompt = `Fix this code error with full file context.
 Error: ${diagnostic.message}
-Current line: ${fullLine}
-Context:
+Error text: "${errorText}"
+File type: ${document.languageId}
+
+Full file:
 \`\`\`
-${context}
+${fullFileContent}
 \`\`\`
 
-Return ONLY the fixed code for this line, nothing else:`;
+Return ONLY the text that should replace "${errorText}":`;
 
         try {
           // Show progress in status bar
           vscode.window.setStatusBarMessage(
-            "$(sync~spin) Fixing error...",
+            "$(sync~spin) Analyzing with full context...",
             3000
           );
 
           // Get AI fix
-          const fix = await localAI.chat(prompt, context);
+          const fix = await localAI.chat(prompt, fullFileContent);
 
           // Clean the response
-          const cleanedFix = fix
+          let cleanedFix = fix
             .replace(/```[a-z]*\n?/g, "")
             .replace(/```$/g, "")
-            .split("\n")[0] // Take only first line
+            .replace(/^["']|["']$/g, '')
             .trim();
 
           if (!cleanedFix) {
@@ -968,8 +962,7 @@ Return ONLY the fixed code for this line, nothing else:`;
 
           // Apply the fix
           await editor.edit((editBuilder) => {
-            const lineRange = document.lineAt(errorLine).range;
-            editBuilder.replace(lineRange, cleanedFix);
+            editBuilder.replace(diagnostic.range, cleanedFix);
           });
 
           vscode.window.setStatusBarMessage("✅ Fix applied!", 2000);
