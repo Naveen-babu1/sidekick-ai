@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import * as path from "path";
+import * as fs from "fs/promises";
 import { LocalAIProvider } from "./providers/LocalAIProvider";
 import { CodeIndexer } from "./indexer/CodeIndexer";
 import { PrivacyGuard } from "./security/PrivacyGuard";
@@ -6,274 +8,292 @@ import { InlineCompletionProvider } from "./providers/InlineCompletionProvider";
 
 // Chat Panel Class - Creates a webview panel on the right side
 class ChatPanel {
-    public static currentPanel: ChatPanel | undefined;
-    private readonly _panel: vscode.WebviewPanel;
-    private _disposables: vscode.Disposable[] = [];
-    private messages: Array<{role: string, content: string}> = [];
+  public static currentPanel: ChatPanel | undefined;
+  private readonly _panel: vscode.WebviewPanel;
+  private _disposables: vscode.Disposable[] = [];
+  private messages: Array<{ role: string; content: string }> = [];
 
-    constructor(
-        panel: vscode.WebviewPanel,
-        private context: vscode.ExtensionContext,
-        private localAI: LocalAIProvider,
-        private indexer: CodeIndexer,
-        private privacyGuard: PrivacyGuard
-    ) {
-        this._panel = panel;
-        this._panel.webview.html = this._getWebviewContent();
-        
-        // Handle messages from the webview
-        this._panel.webview.onDidReceiveMessage(
-            async message => {
-                switch (message.type) {
-                    case 'sendMessage':
-                        await this.handleUserMessage(message.text);
-                        break;
-                    case 'clear':
-                        this.messages = [];
-                        this._panel.webview.postMessage({ type: 'clearMessages' });
-                        break;
-                    case 'insertCode':
-                        this.insertCodeAtCursor(message.code);
-                        break;
-                    case 'copyCode':
-                        await vscode.env.clipboard.writeText(message.code);
-                        vscode.window.showInformationMessage('Code copied to clipboard!');
-                        break;
-                }
-            },
-            undefined,
-            this._disposables
-        );
+  constructor(
+    panel: vscode.WebviewPanel,
+    private context: vscode.ExtensionContext,
+    private localAI: LocalAIProvider,
+    private indexer: CodeIndexer,
+    private privacyGuard: PrivacyGuard
+  ) {
+    this._panel = panel;
+    this._panel.webview.html = this._getWebviewContent();
 
-        // Load saved messages
-        this.loadChatHistory();
-
-        this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
-    }
-
-    public static createOrShow(
-        context: vscode.ExtensionContext,
-        localAI: LocalAIProvider,
-        indexer: CodeIndexer,
-        privacyGuard: PrivacyGuard
-    ) {
-        const column = vscode.ViewColumn.Two; // This makes it appear on the right
-
-        // If we already have a panel, show it
-        if (ChatPanel.currentPanel) {
-            ChatPanel.currentPanel._panel.reveal(column);
-            return;
+    // Handle messages from the webview
+    this._panel.webview.onDidReceiveMessage(
+      async (message) => {
+        switch (message.type) {
+          case "sendMessage":
+            await this.handleUserMessage(message.text);
+            break;
+          case "clear":
+            this.messages = [];
+            this._panel.webview.postMessage({ type: "clearMessages" });
+            break;
+          case "insertCode":
+            this.insertCodeAtCursor(message.code);
+            break;
+          case "copyCode":
+            await vscode.env.clipboard.writeText(message.code);
+            vscode.window.showInformationMessage("Code copied to clipboard!");
+            break;
         }
+      },
+      undefined,
+      this._disposables
+    );
 
-        // Create a new panel
-        const panel = vscode.window.createWebviewPanel(
-            'sidekickChat',
-            'Sidekick AI Chat',
-            column,
-            {
-                enableScripts: true,
-                retainContextWhenHidden: true,
-                localResourceRoots: [context.extensionUri]
-            }
-        );
+    // Load saved messages
+    this.loadChatHistory();
 
-        ChatPanel.currentPanel = new ChatPanel(panel, context, localAI, indexer, privacyGuard);
+    this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+  }
+
+  public static createOrShow(
+    context: vscode.ExtensionContext,
+    localAI: LocalAIProvider,
+    indexer: CodeIndexer,
+    privacyGuard: PrivacyGuard
+  ) {
+    const column = vscode.ViewColumn.Two; // This makes it appear on the right
+
+    // If we already have a panel, show it
+    if (ChatPanel.currentPanel) {
+      ChatPanel.currentPanel._panel.reveal(column);
+      return;
     }
 
-    public addMessage(type: string, input: string, response: string) {
-        this.messages.push({ role: 'user', content: `/${type}: ${input}` });
-        this.messages.push({ role: 'assistant', content: response });
-        
-        this._panel.webview.postMessage({ 
-            type: 'addMessage', 
-            role: 'user', 
-            content: `/${type}: ${input}` 
+    // Create a new panel
+    const panel = vscode.window.createWebviewPanel(
+      "sidekickChat",
+      "Sidekick AI Chat",
+      column,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [context.extensionUri],
+      }
+    );
+
+    ChatPanel.currentPanel = new ChatPanel(
+      panel,
+      context,
+      localAI,
+      indexer,
+      privacyGuard
+    );
+  }
+
+  public addMessage(type: string, input: string, response: string) {
+    this.messages.push({ role: "user", content: `/${type}: ${input}` });
+    this.messages.push({ role: "assistant", content: response });
+
+    this._panel.webview.postMessage({
+      type: "addMessage",
+      role: "user",
+      content: `/${type}: ${input}`,
+    });
+
+    this._panel.webview.postMessage({
+      type: "addMessage",
+      role: "assistant",
+      content: response,
+    });
+
+    this.saveChatHistory();
+  }
+
+  private async handleUserMessage(text: string) {
+    // Add user message
+    this.messages.push({ role: "user", content: text });
+    this._panel.webview.postMessage({
+      type: "addMessage",
+      role: "user",
+      content: text,
+    });
+
+    // Show typing indicator
+    this._panel.webview.postMessage({ type: "showTyping" });
+
+    try {
+      // Get current editor context
+      const editor = vscode.window.activeTextEditor;
+      let context = "";
+
+      if (editor) {
+        const selection = editor.selection;
+        const selectedText = editor.document.getText(selection);
+        const fileName = editor.document.fileName;
+
+        context = `Current file: ${fileName}\n`;
+        if (selectedText) {
+          context += `Selected code:\n\`\`\`${editor.document.languageId}\n${selectedText}\n\`\`\`\n`;
+        }
+      }
+
+      // Check for commands
+      if (text.startsWith("/")) {
+        await this.handleCommand(text, context);
+      } else {
+        // Regular chat
+        const response = await this.localAI.chat(text, context);
+        this.messages.push({ role: "assistant", content: response });
+        this._panel.webview.postMessage({
+          type: "addMessage",
+          role: "assistant",
+          content: response,
         });
-        
-        this._panel.webview.postMessage({ 
-            type: 'addMessage', 
-            role: 'assistant', 
-            content: response 
-        });
-        
-        this.saveChatHistory();
+      }
+    } catch (error) {
+      const errorMsg = `Error: ${error}`;
+      this._panel.webview.postMessage({
+        type: "addMessage",
+        role: "assistant",
+        content: errorMsg,
+      });
     }
 
-    private async handleUserMessage(text: string) {
-        // Add user message
-        this.messages.push({ role: 'user', content: text });
-        this._panel.webview.postMessage({ 
-            type: 'addMessage', 
-            role: 'user', 
-            content: text 
-        });
+    // Hide typing indicator
+    this._panel.webview.postMessage({ type: "hideTyping" });
 
-        // Show typing indicator
-        this._panel.webview.postMessage({ type: 'showTyping' });
+    // Save chat history
+    this.saveChatHistory();
+  }
 
-        try {
-            // Get current editor context
-            const editor = vscode.window.activeTextEditor;
-            let context = '';
-            
-            if (editor) {
-                const selection = editor.selection;
-                const selectedText = editor.document.getText(selection);
-                const fileName = editor.document.fileName;
-                
-                context = `Current file: ${fileName}\n`;
-                if (selectedText) {
-                    context += `Selected code:\n\`\`\`${editor.document.languageId}\n${selectedText}\n\`\`\`\n`;
-                }
-            }
+  private async handleCommand(command: string, context: string) {
+    const [cmd, ...args] = command.split(" ");
+    const editor = vscode.window.activeTextEditor;
 
-            // Check for commands
-            if (text.startsWith('/')) {
-                await this.handleCommand(text, context);
-            } else {
-                // Regular chat
-                const response = await this.localAI.chat(text, context);
-                this.messages.push({ role: 'assistant', content: response });
-                this._panel.webview.postMessage({ 
-                    type: 'addMessage', 
-                    role: 'assistant', 
-                    content: response 
-                });
-            }
-        } catch (error) {
-            const errorMsg = `Error: ${error}`;
-            this._panel.webview.postMessage({ 
-                type: 'addMessage', 
-                role: 'assistant', 
-                content: errorMsg 
+    switch (cmd) {
+      case "/explain":
+        if (editor) {
+          const selectedText = editor.document.getText(editor.selection);
+          if (selectedText) {
+            const explanation = await this.localAI.explainCode(
+              selectedText,
+              context
+            );
+            this.messages.push({ role: "assistant", content: explanation });
+            this._panel.webview.postMessage({
+              type: "addMessage",
+              role: "assistant",
+              content: explanation,
             });
+          } else {
+            this._panel.webview.postMessage({
+              type: "addMessage",
+              role: "assistant",
+              content: "Please select some code first!",
+            });
+          }
         }
+        break;
 
-        // Hide typing indicator
-        this._panel.webview.postMessage({ type: 'hideTyping' });
-        
-        // Save chat history
-        this.saveChatHistory();
-    }
+      case "/refactor":
+        if (editor) {
+          const selectedText = editor.document.getText(editor.selection);
+          if (selectedText) {
+            const instruction = args.join(" ") || "improve this code";
+            const refactored = await this.localAI.refactorCode(
+              selectedText,
+              instruction,
+              context
+            );
+            const response = `Here's the refactored code:\n\n\`\`\`${editor.document.languageId}\n${refactored}\n\`\`\``;
+            this.messages.push({ role: "assistant", content: response });
+            this._panel.webview.postMessage({
+              type: "addMessage",
+              role: "assistant",
+              content: response,
+            });
+          }
+        }
+        break;
 
-    private async handleCommand(command: string, context: string) {
-        const [cmd, ...args] = command.split(' ');
-        const editor = vscode.window.activeTextEditor;
-        
-        switch (cmd) {
-            case '/explain':
-                if (editor) {
-                    const selectedText = editor.document.getText(editor.selection);
-                    if (selectedText) {
-                        const explanation = await this.localAI.explainCode(selectedText, context);
-                        this.messages.push({ role: 'assistant', content: explanation });
-                        this._panel.webview.postMessage({ 
-                            type: 'addMessage', 
-                            role: 'assistant', 
-                            content: explanation 
-                        });
-                    } else {
-                        this._panel.webview.postMessage({ 
-                            type: 'addMessage', 
-                            role: 'assistant', 
-                            content: 'Please select some code first!' 
-                        });
-                    }
-                }
-                break;
-                
-            case '/refactor':
-                if (editor) {
-                    const selectedText = editor.document.getText(editor.selection);
-                    if (selectedText) {
-                        const instruction = args.join(' ') || 'improve this code';
-                        const refactored = await this.localAI.refactorCode(
-                            selectedText,
-                            instruction,
-                            context
-                        );
-                        const response = `Here's the refactored code:\n\n\`\`\`${editor.document.languageId}\n${refactored}\n\`\`\``;
-                        this.messages.push({ role: 'assistant', content: response });
-                        this._panel.webview.postMessage({ 
-                            type: 'addMessage', 
-                            role: 'assistant', 
-                            content: response 
-                        });
-                    }
-                }
-                break;
-                
-            case '/test':
-                if (editor) {
-                    const selectedText = editor.document.getText(editor.selection) || editor.document.getText();
-                    const tests = await this.localAI.generateTests(selectedText, context);
-                    const response = `Generated tests:\n\n\`\`\`${editor.document.languageId}\n${tests}\n\`\`\``;
-                    this.messages.push({ role: 'assistant', content: response });
-                    this._panel.webview.postMessage({ 
-                        type: 'addMessage', 
-                        role: 'assistant', 
-                        content: response 
-                    });
-                }
-                break;
-                
-            case '/help':
-                const helpText = `Available commands:
+      case "/test":
+        if (editor) {
+          const selectedText =
+            editor.document.getText(editor.selection) ||
+            editor.document.getText();
+          const tests = await this.localAI.generateTests(selectedText, context);
+          const response = `Generated tests:\n\n\`\`\`${editor.document.languageId}\n${tests}\n\`\`\``;
+          this.messages.push({ role: "assistant", content: response });
+          this._panel.webview.postMessage({
+            type: "addMessage",
+            role: "assistant",
+            content: response,
+          });
+        }
+        break;
+
+      case "/help":
+        const helpText = `Available commands:
 - **/explain** - Explain selected code
 - **/refactor [instruction]** - Refactor selected code
 - **/test** - Generate tests for selected code
 - **/help** - Show this help message
 
 You can also just chat naturally about your code!`;
-                this.messages.push({ role: 'assistant', content: helpText });
-                this._panel.webview.postMessage({ 
-                    type: 'addMessage', 
-                    role: 'assistant', 
-                    content: helpText 
-                });
-                break;
-                
-            default:
-                this._panel.webview.postMessage({ 
-                    type: 'addMessage', 
-                    role: 'assistant', 
-                    content: `Unknown command: ${cmd}. Type /help for available commands.` 
-                });
-        }
+        this.messages.push({ role: "assistant", content: helpText });
+        this._panel.webview.postMessage({
+          type: "addMessage",
+          role: "assistant",
+          content: helpText,
+        });
+        break;
+
+      default:
+        this._panel.webview.postMessage({
+          type: "addMessage",
+          role: "assistant",
+          content: `Unknown command: ${cmd}. Type /help for available commands.`,
+        });
     }
+  }
 
-    private insertCodeAtCursor(code: string) {
-        const editor = vscode.window.activeTextEditor;
-        if (editor) {
-            editor.edit(editBuilder => {
-                editBuilder.insert(editor.selection.active, code);
-            });
-        }
+  private insertCodeAtCursor(code: string) {
+    const editor = vscode.window.activeTextEditor;
+    if (editor) {
+      editor.edit((editBuilder) => {
+        editBuilder.insert(editor.selection.active, code);
+      });
     }
+  }
 
-    private saveChatHistory() {
-        this.context.globalState.update('chatHistory', this.messages.slice(-100));
+  private saveChatHistory() {
+    this.context.globalState.update("chatHistory", this.messages.slice(-100));
+  }
+
+  private loadChatHistory() {
+    const saved =
+      this.context.globalState.get<Array<{ role: string; content: string }>>(
+        "chatHistory"
+      );
+    if (saved) {
+      this.messages = saved;
+      saved.forEach((msg) => {
+        this._panel.webview.postMessage({
+          type: "addMessage",
+          role: msg.role,
+          content: msg.content,
+        });
+      });
     }
+  }
 
-    private loadChatHistory() {
-        const saved = this.context.globalState.get<Array<{role: string, content: string}>>('chatHistory');
-        if (saved) {
-            this.messages = saved;
-            saved.forEach(msg => {
-                this._panel.webview.postMessage({ 
-                    type: 'addMessage', 
-                    role: msg.role, 
-                    content: msg.content 
-                });
-            });
-        }
-    }
+  // Replace the _getWebviewContent() method in your ChatPanel class with this fixed version:
 
-    // Replace the _getWebviewContent() method in your ChatPanel class with this fixed version:
-
-private _getWebviewContent() {
+  private _getWebviewContent() {
     // Get the SVG URI
-    const iconPath = vscode.Uri.joinPath(this.context.extensionUri, 'resources', 'icon.svg');
+    const iconPath = vscode.Uri.joinPath(
+      this.context.extensionUri,
+      "resources",
+      "icon.svg"
+    );
     const iconUri = this._panel.webview.asWebviewUri(iconPath);
     return `<!DOCTYPE html>
     <html lang="en">
@@ -487,19 +507,14 @@ private _getWebviewContent() {
         </style>
     </head>
     <body>
+        <div class="chat-container">
     <div class="chat-header">
             <span style="display: flex; align-items: center; gap: 8px;">
                 <img src="${iconUri}" width="20" height="20" alt="Sidekick AI"/>
-                <span>Sidekick AI Chat</span>
+                <span style ="font-weight: 600;">Sidekick AI Chat</span>
             </span>
-            <button onclick="clearChat()">Clear</button>
-        </div>
-        <div class="chat-container">
-            <div class="chat-header">
-                <span style="font-weight: 600;">🤖 Sidekick AI Chat</span>
-                <button class="code-action" onclick="clearChat()">Clear</button>
-            </div>
-            
+            <button class="code-action" onclick="clearChat()">Clear</button>
+        </div>            
             <div class="messages-container" id="messages">
                 <div class="welcome-message" id="welcome">
                     <h2>👋 Welcome to Sidekick AI</h2>
@@ -686,23 +701,124 @@ private _getWebviewContent() {
         </script>
     </body>
     </html>`;
+  }
+
+  public dispose() {
+    ChatPanel.currentPanel = undefined;
+    this._panel.dispose();
+
+    while (this._disposables.length) {
+      const disposable = this._disposables.pop();
+      if (disposable) {
+        disposable.dispose();
+      }
+    }
+  }
 }
 
-    public dispose() {
-        ChatPanel.currentPanel = undefined;
-        this._panel.dispose();
-        
-        while (this._disposables.length) {
-            const disposable = this._disposables.pop();
-            if (disposable) {
-                disposable.dispose();
-            }
-        }
+async function runSetupWizard(
+  context: vscode.ExtensionContext,
+  localAI: LocalAIProvider
+) {
+  // Step 1: Check for llama.cpp
+  const step1 = await vscode.window.showInformationMessage(
+    "📦 Step 1/3: Sidekick AI needs llama.cpp to run AI models locally. Do you have it installed?",
+    "I have it",
+    "Download it",
+    "Help me install"
+  );
+
+  if (step1 === "Download it") {
+    const platform = process.platform;
+    const url =
+      platform === "win32"
+        ? "https://github.com/ggerganov/llama.cpp/releases"
+        : "https://github.com/ggerganov/llama.cpp#build";
+    vscode.env.openExternal(vscode.Uri.parse(url));
+    await vscode.window.showInformationMessage(
+      "Download llama.cpp, extract it, then click OK to continue",
+      "OK"
+    );
+  } else if (step1 === "Help me install") {
+    vscode.env.openExternal(
+      vscode.Uri.parse(
+        "https://marketplace.visualstudio.com/items?itemName=NaveenBabu.sidekick-ai"
+      )
+    );
+    return;
+  }
+
+  // Step 2: Model selection
+  const step2 = await vscode.window.showInformationMessage(
+    "🤖 Step 2/3: You need an AI model file (GGUF format). Do you have one?",
+    "I have a model",
+    "Download recommended",
+    "Show me options"
+  );
+
+  if (step2 === "I have a model") {
+    const fileUri = await vscode.window.showOpenDialog({
+      canSelectFiles: true,
+      filters: { "GGUF Models": ["gguf"] },
+      title: "Select your GGUF model file",
+    });
+
+    if (fileUri?.[0]) {
+      const config = vscode.workspace.getConfiguration("sidekick-ai");
+      await config.update("modelPath", fileUri[0].fsPath, true);
     }
+  } else if (step2 === "Download recommended") {
+    vscode.env.openExternal(
+      vscode.Uri.parse(
+        "https://huggingface.co/Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF/resolve/main/qwen2.5-coder-1.5b-instruct-q4_k_m.gguf"
+      )
+    );
+    await vscode.window.showInformationMessage(
+      "Download the model (1GB), save it anywhere, then select it",
+      "Select Downloaded Model"
+    );
+
+    const fileUri = await vscode.window.showOpenDialog({
+      canSelectFiles: true,
+      filters: { "GGUF Models": ["gguf"] },
+      title: "Select the downloaded GGUF model",
+    });
+
+    if (fileUri?.[0]) {
+      const config = vscode.workspace.getConfiguration("sidekick-ai");
+      await config.update("modelPath", fileUri[0].fsPath, true);
+    }
+  } else if (step2 === "Show me options") {
+    vscode.env.openExternal(
+      vscode.Uri.parse("https://huggingface.co/models?search=gguf%20code")
+    );
+  }
+
+  // Step 3: Test setup
+  vscode.window.showInformationMessage(
+    "✅ Setup complete! Initializing Sidekick AI..."
+  );
+
+  // Reinitialize with new settings
+  await localAI.initialize();
+
+  const status = await localAI.checkModelStatus();
+  if (status.isReady) {
+    vscode.window.showInformationMessage(
+      "🎉 Sidekick AI is ready! Press Ctrl+Shift+A to open chat."
+    );
+  } else {
+    vscode.window.showErrorMessage(
+      'Setup incomplete. Check VS Code settings (Ctrl+,) and search for "sidekick-ai"'
+    );
+  }
 }
 
 export async function activate(context: vscode.ExtensionContext) {
-  console.log("Privacy-First Copilot is starting...");
+  console.log("Sidekick AI is starting...");
+
+  // Check if first run
+  const isFirstRun = context.globalState.get("sidekickai.firstRun", true);
 
   // Initialize privacy guard
   const privacyGuard = new PrivacyGuard();
@@ -710,14 +826,52 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Check for local model availability
   const localAI = new LocalAIProvider(context);
+
+  // ADD THIS: Show welcome message for first-time users
+  if (isFirstRun) {
+    const result = await vscode.window.showInformationMessage(
+      "👋 Welcome to Sidekick AI! Your local AI coding assistant needs a quick setup (2 minutes).",
+      "Start Setup",
+      "Watch Tutorial",
+      "Skip"
+    );
+
+    if (result === "Start Setup") {
+      await runSetupWizard(context, localAI);
+    } else if (result === "Watch Tutorial") {
+      vscode.env.openExternal(
+        vscode.Uri.parse(
+          "https://marketplace.visualstudio.com/items?itemName=NaveenBabu.sidekick-ai"
+        )
+      );
+    }
+
+    await context.globalState.update("sidekickai.firstRun", false);
+  }
+
+  // ADD THIS: Initialize with error handling
+  try {
+    await localAI.initialize();
+  } catch (error) {
+    console.error("Failed to initialize LocalAI:", error);
+    const result = await vscode.window.showErrorMessage(
+      "Sidekick AI needs configuration to work. Would you like to set it up now?",
+      "Setup Now",
+      "Open Settings",
+      "Later"
+    );
+
+    if (result === "Setup Now") {
+      await runSetupWizard(context, localAI);
+    } else if (result === "Open Settings") {
+      vscode.commands.executeCommand(
+        "workbench.action.openSettings",
+        "sidekick-ai"
+      );
+    }
+  }
+
   const modelStatus = await localAI.checkModelStatus();
-
-//   let statusBarItem: vscode.StatusBarItem;
-
-// // In activate function
-// statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-// statusBarItem.text = "$(sparkle) AI Ready";
-// context.subscriptions.push(statusBarItem);
 
   if (!modelStatus.isReady) {
     const download = await vscode.window.showInformationMessage(
@@ -748,12 +902,15 @@ export async function activate(context: vscode.ExtensionContext) {
   let chatPanel: ChatPanel | undefined;
 
   // Simple command to open chat as a side panel
-    const openChatCommand = vscode.commands.registerCommand('sidekick-ai.openChat', () => {
-        ChatPanel.createOrShow(context, localAI, indexer, privacyGuard);
-        chatPanel = ChatPanel.currentPanel;
-    });
-    
-    context.subscriptions.push(openChatCommand);
+  const openChatCommand = vscode.commands.registerCommand(
+    "sidekick-ai.openChat",
+    () => {
+      ChatPanel.createOrShow(context, localAI, indexer, privacyGuard);
+      chatPanel = ChatPanel.currentPanel;
+    }
+  );
+
+  context.subscriptions.push(openChatCommand);
 
   // Initialize code indexer for context awareness
   // const indexer = new CodeIndexer(context);
@@ -796,7 +953,10 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand("sidekick-ai.explain", async () => {
       const editor = vscode.window.activeTextEditor;
-      if (!editor) return;
+      if (!editor) {
+        vscode.window.showWarningMessage("Please open a file first");
+        return;
+    }
 
       const selection = editor.selection;
       const selectedText = editor.document.getText(selection);
@@ -805,6 +965,20 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage("Please select code to explain");
         return;
       }
+
+      // Check if AI is ready
+    const modelStatus = await localAI.checkModelStatus();
+    if (!modelStatus.isReady) {
+        const result = await vscode.window.showErrorMessage(
+            'Sidekick AI is not configured. Please set it up first.',
+            'Setup Now',
+            'Cancel'
+        );
+        if (result === 'Setup Now') {
+            await runSetupWizard(context, localAI);
+        }
+        return;
+    }
 
       // Show loading indicator
       const loadingDecoration = vscode.window.createTextEditorDecorationType({
@@ -1002,28 +1176,33 @@ export async function activate(context: vscode.ExtensionContext) {
   // Add a Chat button to the status bar with custom icon
   const chatStatusBarItem = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Right,
-    99  // Priority
+    99 // Priority
   );
-  
+
   // For SVG icons in status bar, you need to use it as a background image
   // VS Code doesn't directly support SVG in status bar text, so we use codicon or text
   chatStatusBarItem.text = "$(comment-discussion) AI Chat";
   chatStatusBarItem.tooltip = "Open Sidekick AI Chat";
   chatStatusBarItem.command = "sidekick-ai.openChat";
   chatStatusBarItem.show();
-  
+
   context.subscriptions.push(chatStatusBarItem);
 
   // Alternative: Create a custom webview button that can use SVG
   const createFloatingButton = () => {
     const button = vscode.window.createWebviewPanel(
-      'sidekickButton',
-      'Sidekick Button',
+      "sidekickButton",
+      "Sidekick Button",
       { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
       { enableScripts: true }
     );
 
-    const iconPath = vscode.Uri.joinPath(context.extensionUri, 'resources', 'public', 'your-icon.svg');
+    const iconPath = vscode.Uri.joinPath(
+      context.extensionUri,
+      "resources",
+      "public",
+      "your-icon.svg"
+    );
     const iconUri = button.webview.asWebviewUri(iconPath);
 
     button.webview.html = `
@@ -1049,9 +1228,9 @@ export async function activate(context: vscode.ExtensionContext) {
     `;
 
     button.webview.onDidReceiveMessage(
-      message => {
-        if (message.command === 'openChat') {
-          vscode.commands.executeCommand('sidekick-ai.openChat');
+      (message) => {
+        if (message.command === "openChat") {
+          vscode.commands.executeCommand("sidekick-ai.openChat");
         }
       },
       undefined,
