@@ -256,7 +256,7 @@ export class LocalAIProvider {
     return null;
   }
 
-  private async ensureServerRunning(): Promise<boolean> {
+  public async ensureServerRunning(): Promise<boolean> {
     // Check if already running
     if (await this.checkServerHealth()) {
       this.isServerRunning = true;

@@ -56,6 +56,21 @@
         "icon": "$(beaker)"
       },
       {
+        "command": "sidekick-ai.fixError",
+        "title": "Fix Error with AI",
+        "category": "Sidekick AI"
+      },
+      {
+        "command": "sidekick-ai.quickFix",
+        "title": "Quick Fix",
+        "category": "Sidekick AI"
+      },
+      {
+        "command": "sidekick-ai.explainError",
+        "title": "Explain Error",
+        "category": "Sidekick AI"
+      },
+      {
         "command": "sidekick-ai.privacyStatus",
         "title": "Show Privacy Status",
         "icon": "$(shield)"

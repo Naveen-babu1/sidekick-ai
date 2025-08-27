@@ -5,6 +5,9 @@ import { LocalAIProvider } from "./providers/LocalAIProvider";
 import { CodeIndexer } from "./indexer/CodeIndexer";
 import { PrivacyGuard } from "./security/PrivacyGuard";
 import { InlineCompletionProvider } from "./providers/InlineCompletionProvider";
+import { CodeFixProvider } from "./providers/CodeFixProvider";
+import { CodeFixHandler } from "./providers/CodeFixHandler";
+import { InlineCodeFixProvider } from "./providers/InlineCodeFixProvider";
 
 // Chat Panel Class - Creates a webview panel on the right side
 class ChatPanel {
@@ -894,6 +897,142 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }
 
+  const inlineFixProvider = new InlineCodeFixProvider(localAI);
+  context.subscriptions.push(
+    vscode.languages.registerCodeActionsProvider(
+      { pattern: "**/*" },
+      inlineFixProvider,
+      {
+        providedCodeActionKinds: InlineCodeFixProvider.providedCodeActionKinds,
+      }
+    )
+  );
+
+  // Quick fix command - applies fix directly
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "sidekick-ai.quickFix",
+      async (
+        document: vscode.TextDocument,
+        diagnostic: vscode.Diagnostic,
+        range: vscode.Range
+      ) => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || editor.document !== document) {
+          return;
+        }
+
+        // Get the error context
+        const errorLine = diagnostic.range.start.line;
+        const errorText = document.getText(diagnostic.range);
+        const fullLine = document.lineAt(errorLine).text;
+
+        // Get surrounding context
+        const startLine = Math.max(0, errorLine - 5);
+        const endLine = Math.min(document.lineCount - 1, errorLine + 5);
+        const context = document.getText(
+          new vscode.Range(startLine, 0, endLine + 1, 0)
+        );
+
+        const prompt = `Fix this ${document.languageId} code error in one line.
+Error: ${diagnostic.message}
+Current line: ${fullLine}
+Context:
+\`\`\`
+${context}
+\`\`\`
+
+Return ONLY the fixed code for this line, nothing else:`;
+
+        try {
+          // Show progress in status bar
+          vscode.window.setStatusBarMessage(
+            "$(sync~spin) Fixing error...",
+            3000
+          );
+
+          // Get AI fix
+          const fix = await localAI.chat(prompt, context);
+
+          // Clean the response
+          const cleanedFix = fix
+            .replace(/```[a-z]*\n?/g, "")
+            .replace(/```$/g, "")
+            .split("\n")[0] // Take only first line
+            .trim();
+
+          if (!cleanedFix) {
+            vscode.window.showWarningMessage("Could not generate fix");
+            return;
+          }
+
+          // Apply the fix
+          await editor.edit((editBuilder) => {
+            const lineRange = document.lineAt(errorLine).range;
+            editBuilder.replace(lineRange, cleanedFix);
+          });
+
+          vscode.window.setStatusBarMessage("✅ Fix applied!", 2000);
+        } catch (error) {
+          vscode.window.showErrorMessage(`Failed to fix: ${error}`);
+        }
+      }
+    )
+  );
+
+  // Explain error command
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "sidekick-ai.explainError",
+      async (document: vscode.TextDocument, diagnostic: vscode.Diagnostic) => {
+        const errorMessage = diagnostic.message;
+        const errorCode = document.getText(diagnostic.range);
+
+        const prompt = `Explain this error in simple terms:
+Error: ${errorMessage}
+Code: ${errorCode}
+
+Provide a brief explanation and how to fix it:`;
+
+        try {
+          const explanation = await localAI.chat(prompt, "");
+
+          // Show in hover or information message
+          vscode.window.showInformationMessage(explanation, { modal: true });
+        } catch (error) {
+          vscode.window.showErrorMessage(`Failed to explain: ${error}`);
+        }
+      }
+    )
+  );
+
+  // Create diagnostic collection for tracking errors
+  const diagnosticCollection =
+    vscode.languages.createDiagnosticCollection("sidekick-ai");
+
+  // Register code action provider for all languages
+  const codeFixProvider = new CodeFixProvider(localAI, diagnosticCollection);
+  context.subscriptions.push(
+    vscode.languages.registerCodeActionsProvider(
+      { pattern: "**/*" },
+      codeFixProvider,
+      {
+        providedCodeActionKinds: CodeFixProvider.providedCodeActionKinds,
+      }
+    )
+  );
+
+  // Register the fix command
+  const codeFixHandler = new CodeFixHandler(localAI, context);
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      "sidekick-ai.fixError",
+      async (document: vscode.TextDocument, diagnostic: vscode.Diagnostic) => {
+        await codeFixHandler.fixError(document, diagnostic);
+      }
+    )
+  );
+
   // Initialize code indexer for context awareness
   const indexer = new CodeIndexer(context);
   await indexer.indexWorkspace();
@@ -928,9 +1067,9 @@ export async function activate(context: vscode.ExtensionContext) {
       inlineProvider
     );
 
-    context.subscriptions.push({
-        dispose: () => localAI.dispose()
-    });
+  context.subscriptions.push({
+    dispose: () => localAI.dispose(),
+  });
 
   // Register commands
   context.subscriptions.push(
@@ -939,7 +1078,7 @@ export async function activate(context: vscode.ExtensionContext) {
       if (!editor) {
         vscode.window.showWarningMessage("Please open a file first");
         return;
-    }
+      }
 
       const selection = editor.selection;
       const selectedText = editor.document.getText(selection);
@@ -950,18 +1089,18 @@ export async function activate(context: vscode.ExtensionContext) {
       }
 
       // Check if AI is ready
-    const modelStatus = await localAI.checkModelStatus();
-    if (!modelStatus.isReady) {
+      const modelStatus = await localAI.checkModelStatus();
+      if (!modelStatus.isReady) {
         const result = await vscode.window.showErrorMessage(
-            'Sidekick AI is not configured. Please set it up first.',
-            'Setup Now',
-            'Cancel'
+          "Sidekick AI is not configured. Please set it up first.",
+          "Setup Now",
+          "Cancel"
         );
-        if (result === 'Setup Now') {
-            await runSetupWizard(context, localAI);
+        if (result === "Setup Now") {
+          await runSetupWizard(context, localAI);
         }
         return;
-    }
+      }
 
       // Show loading indicator
       const loadingDecoration = vscode.window.createTextEditorDecorationType({
