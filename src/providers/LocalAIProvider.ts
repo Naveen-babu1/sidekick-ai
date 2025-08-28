@@ -4,6 +4,7 @@ import { promisify } from "util";
 import * as path from "path";
 import * as fs from "fs/promises";
 import * as os from "os";
+import { LanguageService } from "../languages/LanguageService";
 
 const execAsync = promisify(exec);
 
@@ -532,9 +533,6 @@ export class LocalAIProvider {
       await this.waitForServer();
 
       this.isServerRunning = true;
-      // vscode.window.showInformationMessage(
-      //   "llama.cpp server started successfully!"
-      // );
     } catch (error) {
       console.error("Failed to start llama.cpp server:", error);
       vscode.window.showErrorMessage(
@@ -695,7 +693,8 @@ export class LocalAIProvider {
   async generateCompletion(
     prompt: string,
     context: string,
-    maxTokens: number = 150
+    maxTokens: number = 150,
+    languageId?: string
   ): Promise<string> {
     console.log("🚀 generateCompletion called with llama.cpp");
 
@@ -704,6 +703,13 @@ export class LocalAIProvider {
     if (this.modelCache.has(cacheKey)) {
       console.log("Using cached completion");
       return this.modelCache.get(cacheKey) || "";
+    }
+
+    // Try quick completion first
+    const quickCompletion = this.getQuickCompletion(prompt);
+    if (quickCompletion) {
+      console.log("Using quick completion:", quickCompletion);
+      return quickCompletion;
     }
 
     if (!this.isServerRunning) {
@@ -761,6 +767,10 @@ ${currentLine}`;
             "\nconst",
             "\nlet",
             "\nvar",
+            "\ndef ",
+            "\nif ",
+            "\nfor ",
+            "\nwhile ",
           ],
           cache_prompt: true, // Cache for faster subsequent completions
           stream: false,
@@ -840,46 +850,38 @@ ${currentLine}`;
     return completion;
   }
 
-  private getQuickCompletion(prompt: string): string {
+  private getQuickCompletion(prompt: string, languageId?: string): string {
     const trimmed = prompt.trim();
     const lastLine = trimmed.split("\n").pop() || "";
 
-    // Function patterns
-    if (lastLine.includes("factorial") && lastLine.includes("return 1;")) {
-      return "\n  return n * factorial(n - 1);";
+    // Get language-specific patterns
+    const language = languageId || this.detectLanguage(prompt);
+    const patterns = LanguageService.getCompletionPatterns(language);
+    
+    // Check language-specific patterns first
+    for (const [pattern, completion] of Object.entries(patterns)) {
+      if (lastLine.endsWith(pattern)) {
+        return completion;
+      }
     }
-
-    // After return statements
-    if (lastLine.endsWith("return 1;")) return "\n  ";
-    if (lastLine.endsWith("return 0;")) return "\n  ";
-    if (lastLine.endsWith("return true;")) return "\n  ";
-    if (lastLine.endsWith("return false;")) return "\n  ";
-
-    // Common JS patterns
-    if (lastLine.endsWith("const ")) return "result = ";
-    if (lastLine.endsWith("let ")) return "value = ";
-    if (lastLine.endsWith("function ")) return "doSomething() {";
-    if (lastLine.endsWith("if (")) return "condition) {";
-    if (lastLine.endsWith("for ("))
-      return "let i = 0; i < array.length; i++) {";
-    if (lastLine.endsWith("while (")) return "condition) {";
-    if (lastLine.endsWith("return ")) return "result;";
-    if (lastLine.endsWith("console.")) return "log();";
-    if (lastLine.endsWith("Math.")) return "floor();";
-
-    // React/JSX patterns
-    if (lastLine.endsWith("<")) return "div>";
-    if (lastLine.endsWith("</")) return "div>";
-    if (lastLine.endsWith("/>")) return "";
-
-    // Brackets
-    if (lastLine.endsWith("{")) return "\n  ";
-    if (lastLine.endsWith("(")) return ")";
-    if (lastLine.endsWith("[")) return "]";
-    if (lastLine.endsWith('"')) return '"';
-    if (lastLine.endsWith("'")) return "'";
-    if (lastLine.endsWith("`")) return "`";
-    if (lastLine.endsWith(";")) return "\n  ";
+    
+    // Generic patterns that work across languages
+    const genericPatterns: Record<string, string> = {
+      "{": "\n  ",
+      "(": ")",
+      "[": "]",
+      '"': '"',
+      "'": "'",
+      "`": "`",
+      ";": "\n  ",
+      ":": "\n    ", // Python/YAML indentation
+    };
+    
+    for (const [pattern, completion] of Object.entries(genericPatterns)) {
+      if (lastLine.endsWith(pattern)) {
+        return completion;
+      }
+    }
 
     return "";
   }
@@ -888,11 +890,6 @@ ${currentLine}`;
     const lines = prompt.split("\n");
     const currentLine = lines[lines.length - 1];
     const trimmed = currentLine.trim();
-
-    // Context-aware fallbacks
-    if (prompt.includes("factorial") && currentLine.includes("return 1;")) {
-      return "\n  return n * factorial(n - 1);";
-    }
 
     if (trimmed.endsWith(";")) return "\n  ";
     if (trimmed.endsWith("=")) return " ";
@@ -929,18 +926,13 @@ ${currentLine}`;
     });
   }
 
-  async explainCode(code: string, context: string): Promise<string> {
+  async explainCode(code: string, context: string, languageId?: string): Promise<string> {
     if (!this.isServerRunning) {
       await this.ensureServerRunning();
     }
 
-    const prompt = `Explain this JavaScript code clearly and concisely:
-
-\`\`\`javascript
-${code}
-\`\`\`
-
-Explanation:`;
+    const language = languageId || this.detectLanguage(code);
+    const prompt = LanguageService.generatePrompt(language, 'explain', code, "");
 
     try {
       const response = await fetch(`${this.llamaEndpoint}/completion`, {
@@ -978,23 +970,15 @@ Explanation:`;
   async refactorCode(
     code: string,
     instruction: string,
-    context: string
+    context: string,
+    languageId?: string
   ): Promise<string> {
     if (!this.isServerRunning) {
       await this.ensureServerRunning();
     }
 
-    const prompt = `Refactor this JavaScript code according to the instruction.
-
-Instruction: ${instruction}
-
-Original code:
-\`\`\`javascript
-${code}
-\`\`\`
-
-Refactored code:
-\`\`\`javascript`;
+    const language = languageId || this.detectLanguage(code);
+    const prompt = LanguageService.generatePrompt(language, 'refactor', code, instruction);
 
     try {
       const response = await fetch(`${this.llamaEndpoint}/completion`, {
@@ -1032,23 +1016,13 @@ Refactored code:
     }
   }
 
-  async generateTests(code: string, context: string): Promise<string> {
+  async generateTests(code: string, context: string, languageId?: string): Promise<string> {
     if (!this.isServerRunning) {
       await this.ensureServerRunning();
     }
 
-    const language = this.detectLanguage(code);
-    const testFramework = this.getTestFramework(language);
-
-    const prompt = `Generate comprehensive unit tests for this ${language} code using ${testFramework}.
-
-Code to test:
-\`\`\`${language}
-${code}
-\`\`\`
-
-Unit tests:
-\`\`\`${language}`;
+    const language = languageId || this.detectLanguage(code);
+    const prompt = LanguageService.generatePrompt(language, 'test', code, "");
 
     try {
       const response = await fetch(`${this.llamaEndpoint}/completion`, {
@@ -1082,16 +1056,13 @@ Unit tests:
       }
 
       // Add framework boilerplate if missing
-      if (
-        language === "javascript" &&
-        !tests.includes("describe") &&
-        !tests.includes("test")
-      ) {
-        tests = `// Tests for the provided function
-const { expect } = require('chai');
-
-${tests}`;
-      }
+      // const testImports = LanguageService.getTestImports(language);
+      // if (typeof testImports === "string" && testImports) {
+      //   const firstImportLine = (typeof testImports === 'string' && testImports) ? testImports.split('\n')[0] : '';
+      //   if (!tests.includes(firstImportLine)) {
+      //     tests = `${testImports}\n\n${tests}`;
+      //   }
+      // }
 
       return tests;
     } catch (error) {
@@ -1270,27 +1241,12 @@ Assistant:`;
   }
 
   private detectLanguage(code: string): string {
-    // Simple language detection based on syntax
-    if (code.includes("def ") || code.includes("import ")) return "python";
-    if (code.includes("function") || code.includes("const "))
-      return "javascript";
-    if (code.includes("public class") || code.includes("private "))
-      return "java";
-    if (code.includes("fn ") || code.includes("let mut")) return "rust";
-    if (code.includes("package main") || code.includes("func ")) return "go";
-    return "unknown";
+    return LanguageService.detectLanguage(code);
   }
 
   private getTestFramework(language: string): string {
-    const frameworks: { [key: string]: string } = {
-      python: "pytest",
-      javascript: "jest",
-      typescript: "jest",
-      java: "JUnit",
-      rust: "cargo test",
-      go: "go test",
-    };
-    return frameworks[language] || "unit tests";
+    const config = LanguageService.getLanguageConfig(language);
+    return config?.testFramework || "unit tests";
   }
 
   dispose(): void {

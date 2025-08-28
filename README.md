@@ -23,7 +23,7 @@ See an error? Click the lightbulb and let AI fix it. Sidekick analyzes your enti
 Press `Ctrl+Shift+A` to open a GitHub Copilot-style chat panel. Ask questions, get explanations, or request code improvements.
 
 ### 🔍 Instant Code Explanations
-ight-click selected code and choose "Explain Code" or press `Ctrl+Shift+E` to get a clear explanation. Perfect for understanding complex algorithms or unfamiliar codebases.
+Right-click selected code and choose "Explain Code" or press `Ctrl+Shift+E` to get a clear explanation. Perfect for understanding complex algorithms or unfamiliar codebases.
 
 ### 🔧 Intelligent Refactoring
 Right-click selected code and choose "Refactor Code" to get AI-powered improvements. From performance optimizations to readability enhancements.
