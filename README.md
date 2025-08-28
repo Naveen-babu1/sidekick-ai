@@ -107,6 +107,10 @@ Access settings with `Ctrl+,` and search "sidekick-ai":
 | "Slow responses" | Use quantized models (Q4_K_M recommended) |
 | "No completions" | Enable inline suggestions in VS Code settings |
 
+## Github
+
+https://github.com/Naveen-babu1/sidekick-ai
+
 ## 📈 Roadmap
 
 - [ ] Streaming responses
