@@ -1,3 +1,5 @@
+// src/languages/LanguageService.ts
+
 interface LanguageConfig {
     id: string;
     displayName: string;
@@ -5,20 +7,12 @@ interface LanguageConfig {
     lineComment: string;
     blockComment?: { start: string; end: string };
     testFramework: string;
-    importSyntax: string;
-    functionSyntax: string;
-    completionPatterns: Record<string, string>;
+    testImports: string;
+    completionPatterns: Record<string, string | undefined>;
     keywords: string[];
-    bracePairs: Array<[string, string]>;
 }
 
 export class LanguageService {
-    static getTestImports(language: string) {
-      throw new Error("Method not implemented.");
-    }
-    static detectLanguage(code: string): string {
-      throw new Error("Method not implemented.");
-    }
     private static languages: Map<string, LanguageConfig> = new Map([
         ['javascript', {
             id: 'javascript',
@@ -27,8 +21,7 @@ export class LanguageService {
             lineComment: '//',
             blockComment: { start: '/*', end: '*/' },
             testFramework: 'jest',
-            importSyntax: "import {} from ''",
-            functionSyntax: "function name() {}",
+            testImports: "const { expect } = require('chai');",
             completionPatterns: {
                 'console.': 'log()',
                 'document.': 'getElementById()',
@@ -37,18 +30,17 @@ export class LanguageService {
                 'JSON.': 'stringify()',
                 'Object.': 'keys()',
                 'Promise.': 'resolve()',
-                'function ': '() {}',
+                'async ': 'function',
+                'await ': '',
+                'function ': 'name() {}',
                 'const ': 'variable = ',
                 'let ': 'variable = ',
                 'if (': 'condition) {',
                 'for (': 'let i = 0; i < array.length; i++) {',
                 'while (': 'condition) {',
-                'return ': 'value;',
-                'await ': 'promise',
-                'async ': 'function() {}'
-            } as Record<string, string>,
-            keywords: ['const', 'let', 'var', 'function', 'return', 'if', 'else', 'for', 'while', 'class'],
-            bracePairs: [['(', ')'], ['{', '}'], ['[', ']']]
+                'return ': 'value;'
+            },
+            keywords: ['const', 'let', 'var', 'function', 'class', 'if', 'else', 'for', 'while', 'return', 'async', 'await']
         }],
         
         ['typescript', {
@@ -58,61 +50,60 @@ export class LanguageService {
             lineComment: '//',
             blockComment: { start: '/*', end: '*/' },
             testFramework: 'jest',
-            importSyntax: "import {} from ''",
-            functionSyntax: "function name(): void {}",
+            testImports: "import { expect } from 'chai';",
             completionPatterns: {
                 'console.': 'log()',
-                'document.': 'getElementById()',
-                'interface ': 'Name {}',
+                'Math.': 'floor()',
+                'Array.': 'isArray()',
+                'interface ': 'Name {',
                 'type ': 'Name = ',
-                'enum ': 'Name {}',
-                'class ': 'Name {}',
-                'public ': 'property: type;',
-                'private ': 'property: type;',
-                'protected ': 'property: type;',
-                'readonly ': 'property: type;',
-                ': ': 'string',
-                '<': 'T>',
-                'extends ': 'BaseClass',
-                'implements ': 'Interface'
-            } as Record<string, string>,
-            keywords: ['const', 'let', 'interface', 'type', 'enum', 'class', 'public', 'private', 'protected'],
-            bracePairs: [['(', ')'], ['{', '}'], ['[', ']'], ['<', '>']]
+                'enum ': 'Name {',
+                'class ': 'Name {',
+                'public ': 'property: ',
+                'private ': 'property: ',
+                'protected ': 'property: ',
+                'readonly ': 'property: ',
+                'async ': 'function',
+                'await ': '',
+                'function ': 'name(): void {',
+                'const ': 'variable: type = '
+            },
+            keywords: ['const', 'let', 'var', 'function', 'class', 'interface', 'type', 'enum', 'public', 'private', 'protected', 'async', 'await']
         }],
         
         ['python', {
             id: 'python',
             displayName: 'Python',
-            fileExtensions: ['.py', '.pyw'],
+            fileExtensions: ['.py'],
             lineComment: '#',
             blockComment: { start: '"""', end: '"""' },
             testFramework: 'pytest',
-            importSyntax: 'import module',
-            functionSyntax: 'def function():',
+            testImports: 'import pytest',
             completionPatterns: {
                 'print': '()',
                 'len': '()',
                 'range': '()',
-                'def ': 'function():',
+                'str': '()',
+                'int': '()',
+                'float': '()',
+                'list': '()',
+                'dict': '()',
+                'def ': 'function_name():',
                 'class ': 'ClassName:',
                 'if ': 'condition:',
                 'elif ': 'condition:',
                 'else:': '\n    ',
-                'for ': 'item in items:',
+                'for ': 'item in iterable:',
                 'while ': 'condition:',
+                'import ': '',
+                'from ': 'module import ',
+                'return ': '',
+                'yield ': '',
                 'with ': 'open() as f:',
                 'try:': '\n    ',
-                'except ': 'Exception:',
-                'import ': 'module',
-                'from ': 'module import',
-                'return ': 'value',
-                'lambda ': 'x: x',
-                'self.': 'method()',
-                '__init__': '(self):',
-                '@': 'decorator'
-            } as Record<string, string>,
-            keywords: ['def', 'class', 'if', 'elif', 'else', 'for', 'while', 'with', 'try', 'except', 'import', 'from', 'return', 'lambda'],
-            bracePairs: [['(', ')'], ['[', ']'], ['{', '}']]
+                'except ': 'Exception as e:'
+            },
+            keywords: ['def', 'class', 'if', 'elif', 'else', 'for', 'while', 'import', 'from', 'return', 'yield', 'with', 'try', 'except', 'finally']
         }],
         
         ['java', {
@@ -122,31 +113,27 @@ export class LanguageService {
             lineComment: '//',
             blockComment: { start: '/*', end: '*/' },
             testFramework: 'JUnit',
-            importSyntax: 'import package.Class;',
-            functionSyntax: 'public void method() {}',
+            testImports: 'import org.junit.Test;\nimport static org.junit.Assert.*;',
             completionPatterns: {
                 'System.out.': 'println()',
                 'System.err.': 'println()',
-                'public ': 'void method() {}',
-                'private ': 'String variable;',
-                'protected ': 'int variable;',
-                'static ': 'final String CONSTANT = ',
-                'class ': 'ClassName {}',
-                'interface ': 'InterfaceName {}',
-                'extends ': 'ParentClass',
-                'implements ': 'Interface',
-                'new ': 'Object()',
-                'throw new ': 'Exception()',
-                'try {': '\n    ',
-                'catch (': 'Exception e) {',
-                'finally {': '\n    ',
-                'for (': 'int i = 0; i < length; i++) {',
+                'String ': 'variable = ',
+                'int ': 'variable = ',
+                'double ': 'variable = ',
+                'boolean ': 'variable = ',
+                'public ': 'void methodName()',
+                'private ': 'void methodName()',
+                'protected ': 'void methodName()',
+                'static ': 'void methodName()',
+                'class ': 'ClassName {',
+                'interface ': 'InterfaceName {',
                 'if (': 'condition) {',
-                'return ': 'value;',
-                '@Override': '\npublic '
-            } as Record<string, string>,
-            keywords: ['public', 'private', 'protected', 'static', 'final', 'class', 'interface', 'extends', 'implements'],
-            bracePairs: [['(', ')'], ['{', '}'], ['[', ']']]
+                'for (': 'int i = 0; i < length; i++) {',
+                'while (': 'condition) {',
+                'return ': ';',
+                'new ': 'Object()'
+            },
+            keywords: ['public', 'private', 'protected', 'static', 'final', 'class', 'interface', 'extends', 'implements', 'if', 'else', 'for', 'while', 'return', 'new']
         }],
         
         ['cpp', {
@@ -155,63 +142,29 @@ export class LanguageService {
             fileExtensions: ['.cpp', '.cc', '.cxx', '.hpp', '.h'],
             lineComment: '//',
             blockComment: { start: '/*', end: '*/' },
-            testFramework: 'GoogleTest',
-            importSyntax: '#include <iostream>',
-            functionSyntax: 'void function() {}',
+            testFramework: 'Google Test',
+            testImports: '#include <gtest/gtest.h>',
             completionPatterns: {
-                'std::': 'cout',
-                'cout << ': '"text"',
-                'cin >> ': 'variable',
+                'std::cout': ' << ',
+                'std::cin': ' >> ',
+                'std::': 'vector<>',
+                'cout': ' << ',
+                'cin': ' >> ',
                 '#include ': '<iostream>',
                 'using ': 'namespace std;',
-                'class ': 'ClassName {};',
-                'struct ': 'StructName {};',
-                'public:': '\n    ',
-                'private:': '\n    ',
-                'protected:': '\n    ',
-                'template <': 'typename T>',
-                'virtual ': 'void method()',
-                'const ': 'int variable = ',
-                'nullptr': '',
-                'new ': 'Type()',
-                'delete ': 'pointer',
+                'int ': 'variable = ',
+                'double ': 'variable = ',
+                'char ': 'variable = ',
+                'bool ': 'variable = ',
+                'void ': 'functionName()',
+                'class ': 'ClassName {',
+                'struct ': 'StructName {',
+                'if (': 'condition) {',
                 'for (': 'int i = 0; i < n; i++) {',
-                'if (': 'condition) {',
-                'return ': '0;'
-            } as Record<string, string>,
-            keywords: ['class', 'struct', 'public', 'private', 'protected', 'virtual', 'const', 'template'],
-            bracePairs: [['(', ')'], ['{', '}'], ['[', ']'], ['<', '>']]
-        }],
-        
-        ['csharp', {
-            id: 'csharp',
-            displayName: 'C#',
-            fileExtensions: ['.cs'],
-            lineComment: '//',
-            blockComment: { start: '/*', end: '*/' },
-            testFramework: 'NUnit',
-            importSyntax: 'using System;',
-            functionSyntax: 'public void Method() {}',
-            completionPatterns: {
-                'Console.': 'WriteLine()',
-                'using ': 'System;',
-                'namespace ': 'MyNamespace {}',
-                'class ': 'ClassName {}',
-                'public ': 'void Method() {}',
-                'private ': 'string field;',
-                'protected ': 'int Property { get; set; }',
-                'static ': 'void Main() {}',
-                'var ': 'variable = ',
-                'new ': 'Object()',
-                'async ': 'Task Method() {}',
-                'await ': 'Task.Run()',
-                'foreach (': 'var item in collection) {',
-                'if (': 'condition) {',
-                'return ': 'value;',
-                'throw new ': 'Exception()'
-            } as Record<string, string>,
-            keywords: ['using', 'namespace', 'class', 'public', 'private', 'protected', 'static', 'async', 'await'],
-            bracePairs: [['(', ')'], ['{', '}'], ['[', ']'], ['<', '>']]
+                'while (': 'condition) {',
+                'return ': ';'
+            },
+            keywords: ['int', 'double', 'char', 'bool', 'void', 'class', 'struct', 'public', 'private', 'protected', 'if', 'else', 'for', 'while', 'return']
         }],
         
         ['go', {
@@ -220,28 +173,24 @@ export class LanguageService {
             fileExtensions: ['.go'],
             lineComment: '//',
             blockComment: { start: '/*', end: '*/' },
-            testFramework: 'testing',
-            importSyntax: 'import "fmt"',
-            functionSyntax: 'func name() {}',
+            testFramework: 'go test',
+            testImports: 'import "testing"',
             completionPatterns: {
                 'fmt.': 'Println()',
-                'func ': 'name() {}',
-                'var ': 'name = ',
-                'const ': 'name = ',
-                'type ': 'Name struct {}',
-                'package ': 'main',
-                'import ': '"fmt"',
+                'func ': 'name() {',
                 'if ': 'condition {',
                 'for ': 'i := 0; i < n; i++ {',
                 'range ': 'slice {',
-                'return ': 'value',
-                'defer ': 'func()',
-                'go ': 'func()',
-                'chan ': 'int',
-                'make(': 'map[string]int)'
-            } as Record<string, string>,
-            keywords: ['func', 'var', 'const', 'type', 'package', 'import', 'if', 'for', 'range', 'return', 'defer', 'go', 'chan'],
-            bracePairs: [['(', ')'], ['{', '}'], ['[', ']']]
+                'var ': 'name type',
+                'const ': 'name = ',
+                'type ': 'Name struct {',
+                'package ': 'main',
+                'import ': '""',
+                'return ': '',
+                'defer ': '',
+                'go ': 'func()'
+            },
+            keywords: ['func', 'if', 'else', 'for', 'range', 'var', 'const', 'type', 'package', 'import', 'return', 'defer', 'go']
         }],
         
         ['rust', {
@@ -251,141 +200,144 @@ export class LanguageService {
             lineComment: '//',
             blockComment: { start: '/*', end: '*/' },
             testFramework: 'cargo test',
-            importSyntax: 'use std::io;',
-            functionSyntax: 'fn function() {}',
+            testImports: '#[cfg(test)]',
             completionPatterns: {
-                'fn ': 'name() {}',
+                'println!': '("")',
                 'let ': 'variable = ',
                 'let mut ': 'variable = ',
-                'const ': 'NAME: type = ',
-                'struct ': 'Name {}',
-                'impl ': 'StructName {}',
-                'trait ': 'TraitName {}',
-                'enum ': 'Name {}',
-                'use ': 'std::',
-                'pub ': 'fn function() {}',
-                'match ': 'value {',
-                'if let ': 'Some(x) = ',
-                'loop {': '\n    ',
+                'fn ': 'name() {',
+                'if ': 'condition {',
+                'for ': 'item in iterator {',
                 'while ': 'condition {',
-                'for ': 'item in iter {',
-                'return ': 'value;',
-                'Some(': 'value)',
-                'None': '',
-                'Ok(': 'value)',
-                'Err(': 'error)'
-            } as Record<string, string>,
-            keywords: ['fn', 'let', 'mut', 'const', 'struct', 'impl', 'trait', 'enum', 'use', 'pub', 'match'],
-            bracePairs: [['(', ')'], ['{', '}'], ['[', ']'], ['<', '>']]
+                'match ': 'value {',
+                'struct ': 'Name {',
+                'enum ': 'Name {',
+                'impl ': 'Type {',
+                'use ': 'std::',
+                'mod ': 'name;',
+                'pub ': 'fn name()'
+            },
+            keywords: ['let', 'mut', 'fn', 'if', 'else', 'for', 'while', 'match', 'struct', 'enum', 'impl', 'use', 'mod', 'pub']
         }],
-        
-        ['ruby', {
-            id: 'ruby',
-            displayName: 'Ruby',
-            fileExtensions: ['.rb'],
-            lineComment: '#',
-            blockComment: { start: '=begin', end: '=end' },
-            testFramework: 'RSpec',
-            importSyntax: "require 'module'",
-            functionSyntax: 'def method_name; end',
+
+        ['csharp', {
+            id: 'csharp',
+            displayName: 'C#',
+            fileExtensions: ['.cs'],
+            lineComment: '//',
+            blockComment: { start: '/*', end: '*/' },
+            testFramework: 'xUnit',
+            testImports: 'using Xunit;',
             completionPatterns: {
-                'puts ': '"text"',
-                'print ': '"text"',
-                'def ': 'method_name',
-                'class ': 'ClassName',
-                'module ': 'ModuleName',
-                'if ': 'condition',
-                'unless ': 'condition',
-                'while ': 'condition',
-                'for ': 'item in array',
-                'do |': 'param|',
-                'end': '',
-                'require ': "'module'",
-                'attr_accessor ': ':attribute',
-                'attr_reader ': ':attribute',
-                'attr_writer ': ':attribute'
-            } as Record<string, string>,
-            keywords: ['def', 'class', 'module', 'if', 'unless', 'while', 'for', 'do', 'end', 'require'],
-            bracePairs: [['(', ')'], ['{', '}'], ['[', ']'], ['do', 'end']]
+                'Console.': 'WriteLine()',
+                'System.': 'Console',
+                'public ': 'void MethodName()',
+                'private ': 'void MethodName()',
+                'protected ': 'void MethodName()',
+                'static ': 'void MethodName()',
+                'class ': 'ClassName {',
+                'interface ': 'IName {',
+                'var ': 'variable = ',
+                'string ': 'variable = ',
+                'int ': 'variable = ',
+                'if (': 'condition) {',
+                'foreach (': 'var item in collection) {',
+                'for (': 'int i = 0; i < length; i++) {',
+                'while (': 'condition) {',
+                'using ': 'System;'
+            },
+            keywords: ['public', 'private', 'protected', 'static', 'class', 'interface', 'var', 'string', 'int', 'if', 'else', 'foreach', 'for', 'while', 'using']
         }]
     ]);
-
-    static getLanguageConfig(languageId: string): LanguageConfig | undefined {
-        return this.languages.get(languageId) || this.languages.get('javascript');
-    }
 
     static getAllLanguageIds(): string[] {
         return Array.from(this.languages.keys());
     }
 
-    static getCompletionPatterns(languageId: string): Record<string, string> {
-        const config = this.getLanguageConfig(languageId);
-        return config?.completionPatterns || {};
+    static getLanguageConfig(languageId: string): LanguageConfig | undefined {
+        return this.languages.get(languageId);
     }
 
-    static getTestFramework(languageId: string): string {
-        const config = this.getLanguageConfig(languageId);
-        return config?.testFramework || 'unit tests';
-    }
+    static generatePrompt(language: string, type: 'explain' | 'test' | 'refactor', code: string, instruction?: string): string {
+        const config = this.languages.get(language);
+        const langName = config?.displayName || language;
 
-    static generatePrompt(languageId: string, task: string, code: string, instruction: string): string {
-        const config = this.getLanguageConfig(languageId);
-        const langName = config?.displayName || 'code';
-        
-        switch (task) {
+        switch (type) {
             case 'explain':
-                return `Explain this ${langName} code clearly and concisely:\n\n\`\`\`${languageId}\n${code}\n\`\`\`\n\nExplanation:`;
-            
-            case 'refactor':
-                return `Refactor this ${langName} code for better performance and readability:\n\n\`\`\`${languageId}\n${code}\n\`\`\`\n\nRefactored code:`;
-            
+                return `Explain this ${langName} code clearly and concisely:
+
+\`\`\`${language}
+${code}
+\`\`\`
+
+Explanation:`;
+
             case 'test':
-                return `Generate comprehensive unit tests for this ${langName} code using ${config?.testFramework}:\n\n\`\`\`${languageId}\n${code}\n\`\`\`\n\nUnit tests:`;
-            
-            case 'fix':
-                return `Fix the error in this ${langName} code:\n\n\`\`\`${languageId}\n${code}\n\`\`\`\n\nFixed code:`;
-            
+                const framework = config?.testFramework || 'unit test';
+                return `Generate comprehensive ${framework} tests for this ${langName} code:
+
+\`\`\`${language}
+${code}
+\`\`\`
+
+Tests using ${framework}:
+\`\`\`${language}`;
+
+            case 'refactor':
+                return `Refactor this ${langName} code according to the instruction.
+
+Instruction: ${instruction || 'Improve code quality and readability'}
+
+Original code:
+\`\`\`${language}
+${code}
+\`\`\`
+
+Refactored code:
+\`\`\`${language}`;
+
             default:
-                return `Analyze this ${langName} code:\n\n\`\`\`${languageId}\n${code}\n\`\`\``;
+                return `Process this ${langName} code:\n\`\`\`${language}\n${code}\n\`\`\``;
         }
     }
 
-    static formatTestBoilerplate(languageId: string, tests: string): string {
-        const config = this.getLanguageConfig(languageId);
-        
-        switch (languageId) {
-            case 'javascript':
-            case 'typescript':
-                if (!tests.includes('describe') && !tests.includes('test')) {
-                    return `// Tests using ${config?.testFramework}\nconst { expect } = require('chai');\n\n${tests}`;
-                }
-                break;
-            
-            case 'python':
-                if (!tests.includes('import') && !tests.includes('def test_')) {
-                    return `# Tests using ${config?.testFramework}\nimport pytest\n\n${tests}`;
-                }
-                break;
-            
-            case 'java':
-                if (!tests.includes('import org.junit') && !tests.includes('@Test')) {
-                    return `// Tests using ${config?.testFramework}\nimport org.junit.Test;\nimport static org.junit.Assert.*;\n\n${tests}`;
-                }
-                break;
-            
-            case 'csharp':
-                if (!tests.includes('using NUnit') && !tests.includes('[Test]')) {
-                    return `// Tests using ${config?.testFramework}\nusing NUnit.Framework;\n\n${tests}`;
-                }
-                break;
-            
-            case 'go':
-                if (!tests.includes('testing') && !tests.includes('func Test')) {
-                    return `// Tests using ${config?.testFramework}\npackage main\n\nimport "testing"\n\n${tests}`;
-                }
-                break;
+    static getCompletionPatterns(language: string): Record<string, string> {
+        const config = this.languages.get(language);
+        return Object.fromEntries(
+            Object.entries(config?.completionPatterns || {}).filter(([_, value]) => value !== undefined)
+        ) as Record<string, string>;
+    }
+
+    static getTestImports(language: string): string {
+        const config = this.languages.get(language);
+        return config?.testImports || '';
+    }
+
+    static detectLanguage(code: string): string {
+        // Check for language-specific patterns
+        const patterns: { [key: string]: RegExp[] } = {
+            python: [/\bdef\s+\w+\s*\(/, /\bclass\s+\w+[:\(]/, /\bimport\s+\w+/, /\bfrom\s+\w+\s+import/, /\bprint\s*\(/, /\bif\s+.*:/, /\belif\s+/, /\bexcept\s+/],
+            javascript: [/\bfunction\s+\w+\s*\(/, /\bconst\s+\w+\s*=/, /\blet\s+\w+\s*=/, /\bvar\s+\w+\s*=/, /=>/, /console\.\w+/, /\basync\s+function/, /\bawait\s+/],
+            typescript: [/\binterface\s+\w+/, /\btype\s+\w+\s*=/, /:\s*(string|number|boolean|any|void)\b/, /\benum\s+\w+/, /\bnamespace\s+/, /\bpublic\s+\w+\s*:/],
+            java: [/\bpublic\s+class\s+/, /\bimport\s+java\./, /\bprivate\s+\w+/, /\bprotected\s+/, /System\.out\./, /\bvoid\s+\w+\s*\(/, /\bstatic\s+/],
+            cpp: [/#include\s*[<"]/, /std::/, /cout\s*<</, /cin\s*>>/, /\busing\s+namespace\s+/, /\btemplate\s*</, /\bvirtual\s+/],
+            go: [/\bpackage\s+\w+/, /\bfunc\s+\w+\s*\(/, /\bfmt\./, /\bdefer\s+/, /\bgo\s+\w+/, /\bchan\s+/, /\brange\s+/],
+            rust: [/\bfn\s+\w+\s*\(/, /\blet\s+mut\s+/, /\bpub\s+/, /\bimpl\s+/, /\bmatch\s+/, /println!/, /\bstruct\s+\w+/, /\benum\s+\w+/],
+            csharp: [/\busing\s+System/, /\bnamespace\s+/, /\bpublic\s+class\s+/, /Console\./, /\bvar\s+\w+\s*=/, /\bforeach\s*\(/, /\basync\s+Task/]
+        };
+
+        // Count matches for each language
+        let maxMatches = 0;
+        let detectedLanguage = 'javascript'; // Default fallback
+
+        for (const [lang, langPatterns] of Object.entries(patterns)) {
+            const matches = langPatterns.filter(pattern => pattern.test(code)).length;
+            if (matches > maxMatches) {
+                maxMatches = matches;
+                detectedLanguage = lang;
+            }
         }
-        
-        return tests;
+
+        return detectedLanguage;
     }
 }
