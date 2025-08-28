@@ -909,69 +909,69 @@ export async function activate(context: vscode.ExtensionContext) {
   );
 
   // Quick fix command - applies fix directly
-  context.subscriptions.push(
-    vscode.commands.registerCommand(
-      "sidekick-ai.quickFix",
-      async (
-        document: vscode.TextDocument,
-        diagnostic: vscode.Diagnostic,
-        range: vscode.Range
-      ) => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor || editor.document !== document) {
-          return;
-        }
+//   context.subscriptions.push(
+//     vscode.commands.registerCommand(
+//       "sidekick-ai.quickFix",
+//       async (
+//         document: vscode.TextDocument,
+//         diagnostic: vscode.Diagnostic,
+//         range: vscode.Range
+//       ) => {
+//         const editor = vscode.window.activeTextEditor;
+//         if (!editor || editor.document !== document) {
+//           return;
+//         }
 
-        // Use FULL file as context
-            const fullFileContent = document.getText();
-            const errorText = document.getText(diagnostic.range);
+//         // Use FULL file as context
+//             const fullFileContent = document.getText();
+//             const errorText = document.getText(diagnostic.range);
             
-            const prompt = `Fix this code error with full file context.
-Error: ${diagnostic.message}
-Error text: "${errorText}"
-File type: ${document.languageId}
+//             const prompt = `Fix this code error with full file context.
+// Error: ${diagnostic.message}
+// Error text: "${errorText}"
+// File type: ${document.languageId}
 
-Full file:
-\`\`\`
-${fullFileContent}
-\`\`\`
+// Full file:
+// \`\`\`
+// ${fullFileContent}
+// \`\`\`
 
-Return ONLY the text that should replace "${errorText}":`;
+// Return ONLY the text that should replace "${errorText}":`;
 
-        try {
-          // Show progress in status bar
-          vscode.window.setStatusBarMessage(
-            "$(sync~spin) Analyzing with full context...",
-            3000
-          );
+//         try {
+//           // Show progress in status bar
+//           vscode.window.setStatusBarMessage(
+//             "$(sync~spin) Analyzing with full context...",
+//             3000
+//           );
 
-          // Get AI fix
-          const fix = await localAI.chat(prompt, fullFileContent);
+//           // Get AI fix
+//           const fix = await localAI.chat(prompt, fullFileContent);
 
-          // Clean the response
-          let cleanedFix = fix
-            .replace(/```[a-z]*\n?/g, "")
-            .replace(/```$/g, "")
-            .replace(/^["']|["']$/g, '')
-            .trim();
+//           // Clean the response
+//           let cleanedFix = fix
+//             .replace(/```[a-z]*\n?/g, "")
+//             .replace(/```$/g, "")
+//             .replace(/^["']|["']$/g, '')
+//             .trim();
 
-          if (!cleanedFix) {
-            vscode.window.showWarningMessage("Could not generate fix");
-            return;
-          }
+//           if (!cleanedFix) {
+//             vscode.window.showWarningMessage("Could not generate fix");
+//             return;
+//           }
 
-          // Apply the fix
-          await editor.edit((editBuilder) => {
-            editBuilder.replace(diagnostic.range, cleanedFix);
-          });
+//           // Apply the fix
+//           await editor.edit((editBuilder) => {
+//             editBuilder.replace(diagnostic.range, cleanedFix);
+//           });
 
-          vscode.window.setStatusBarMessage("✅ Fix applied!", 2000);
-        } catch (error) {
-          vscode.window.showErrorMessage(`Failed to fix: ${error}`);
-        }
-      }
-    )
-  );
+//           vscode.window.setStatusBarMessage("✅ Fix applied!", 2000);
+//         } catch (error) {
+//           vscode.window.showErrorMessage(`Failed to fix: ${error}`);
+//         }
+//       }
+//     )
+//   );
 
   // Explain error command
   context.subscriptions.push(
