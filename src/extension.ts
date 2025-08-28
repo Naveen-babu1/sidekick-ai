@@ -295,7 +295,7 @@ You can also just chat naturally about your code!`;
     const iconPath = vscode.Uri.joinPath(
       this.context.extensionUri,
       "resources",
-      "icon.svg"
+      "icon.png"
     );
     const iconUri = this._panel.webview.asWebviewUri(iconPath);
     return `<!DOCTYPE html>
@@ -513,7 +513,7 @@ You can also just chat naturally about your code!`;
         <div class="chat-container">
     <div class="chat-header">
             <span style="display: flex; align-items: center; gap: 8px;">
-                <img src="${iconUri}" width="20" height="20" alt="Sidekick AI"/>
+                <img src="${iconUri}" width="24" height="24" alt="Sidekick AI" style="display: inline-block;"/>
                 <span style ="font-weight: 600;">Sidekick AI Chat</span>
             </span>
             <button class="code-action" onclick="clearChat()">Clear</button>
