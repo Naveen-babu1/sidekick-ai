@@ -1409,9 +1409,9 @@ Provide a brief explanation and how to fix it:`;
 
   context.subscriptions.push(watcher);
 
-  vscode.window.showInformationMessage(
-    "Privacy-First Copilot: Ready (100% Local Processing)"
-  );
+  // vscode.window.showInformationMessage(
+  //   "Privacy-First Copilot: Ready (100% Local Processing)"
+  // );
 }
 
 function getPrivacyReportHtml(report: any): string {

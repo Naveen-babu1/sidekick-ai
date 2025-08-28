@@ -532,9 +532,9 @@ export class LocalAIProvider {
       await this.waitForServer();
 
       this.isServerRunning = true;
-      vscode.window.showInformationMessage(
-        "llama.cpp server started successfully!"
-      );
+      // vscode.window.showInformationMessage(
+      //   "llama.cpp server started successfully!"
+      // );
     } catch (error) {
       console.error("Failed to start llama.cpp server:", error);
       vscode.window.showErrorMessage(
@@ -1233,15 +1233,12 @@ Assistant:`;
       await this.ensureServerRunning();
 
       if (this.isServerRunning) {
-        statusItem.text = "Sidekick AI: Ready";
+        statusItem.text = "$(check) Sidekick AI";
         statusItem.tooltip =
-          "Sidekick AI is ready! Press Ctrl+Shift+A to open chat.";
-        vscode.window.showInformationMessage(
-          "Sidekick AI is ready! Press Ctrl+Shift+A to open chat."
-        );
+          "Sidekick AI is ready - Ctrl+Shift+A for chat";
       } else {
-        statusItem.text = "Sidekick AI: Setup Required";
-        statusItem.tooltip = "Sidekick AI needs setup. Click to configure.";
+        statusItem.text = "$(warning) Sidekick AI";
+        statusItem.tooltip = "Click to setup";
         const result = await vscode.window.showWarningMessage(
           "Sidekick AI needs setup. Would you like to configure it now?",
           "Setup Now",
@@ -1256,7 +1253,7 @@ Assistant:`;
         }
       }
     } catch (error) {
-      statusItem.text = "Sidekick AI: Error";
+      statusItem.text = "$(error) Sidekick AI";
       statusItem.tooltip =
         "Initialization failed. Check the console for details.";
       console.error("Initialization failed:", error);
