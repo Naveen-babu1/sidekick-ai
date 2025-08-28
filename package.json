@@ -2,7 +2,7 @@
   "name": "sidekick-ai",
   "displayName": "Sidekick AI - Local Coding Assistant",
   "description": "Privacy-focused AI coding assistant that runs 100% locally on your machine",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "publisher": "NaveenBabu",
   "engines": {
     "vscode": "^1.85.0"
