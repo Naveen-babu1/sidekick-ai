@@ -20,10 +20,10 @@ Unlike cloud-based AI assistants, Sidekick AI runs **entirely on your machine**.
 See an error? Click the lightbulb and let AI fix it. Sidekick analyzes your entire file context to provide intelligent fixes, not just simple corrections.
 
 ### 💬 Interactive AI Chat
-Press `Ctrl+Shift+A` (or `Cmd+Shift+A` on Mac) to open a GitHub Copilot-style chat panel. Ask questions, get explanations, or request code improvements.
+Press `Ctrl+Shift+A` to open a GitHub Copilot-style chat panel. Ask questions, get explanations, or request code improvements.
 
 ### 🔍 Instant Code Explanations
-Select any code and press `Alt+E` (`Option+E` on Mac) to get a clear explanation. Perfect for understanding complex algorithms or unfamiliar codebases.
+ight-click selected code and choose "Explain Code" or press `Ctrl+Shift+E` to get a clear explanation. Perfect for understanding complex algorithms or unfamiliar codebases.
 
 ### 🔧 Intelligent Refactoring
 Right-click selected code and choose "Refactor Code" to get AI-powered improvements. From performance optimizations to readability enhancements.
@@ -106,13 +106,6 @@ Access settings with `Ctrl+,` and search "sidekick-ai":
 | "Model not found" | Check model path in settings |
 | "Slow responses" | Use quantized models (Q4_K_M recommended) |
 | "No completions" | Enable inline suggestions in VS Code settings |
-
-## 💡 Pro Tips
-
-1. **Faster responses:** Use smaller context windows (2048) for quick completions
-2. **Better quality:** Try 7B models if you have 8GB+ RAM
-3. **Offline setup:** Download multiple models for different tasks
-4. **Custom models:** Any GGUF format model works!
 
 ## 📈 Roadmap
 
