@@ -42,17 +42,17 @@
       },
       {
         "command": "sidekick-ai.explain",
-        "title": "Explain Code (Local AI)",
+        "title": "Explain Code - Sidekick AI",
         "icon": "$(comment-discussion)"
       },
       {
         "command": "sidekick-ai.refactor",
-        "title": "Refactor Code (Local AI)",
+        "title": "Refactor Code - Sidekick AI",
         "icon": "$(edit)"
       },
       {
         "command": "sidekick-ai.generateTests",
-        "title": "Generate Tests (Local AI)",
+        "title": "Generate Tests - Sidekick AI",
         "icon": "$(beaker)"
       },
       {
@@ -116,7 +116,7 @@
         {
           "id": "sidekick-ai",
           "title": "sidekick-ai",
-          "icon": "resource/icon.svg"
+          "icon": "resource/icon.png"
         }
       ]
     },
