@@ -7,7 +7,7 @@ import { PrivacyGuard } from "./security/PrivacyGuard";
 import { InlineCompletionProvider } from "./providers/InlineCompletionProvider";
 import { CodeFixProvider } from "./providers/CodeFixProvider";
 import { CodeFixHandler } from "./providers/CodeFixHandler";
-import { InlineCodeFixProvider } from "./providers/InlineCodeFixProvider";
+// import { InlineCodeFixProvider } from "./providers/InlineCodeFixProvider";
 
 // Chat Panel Class - Creates a webview panel on the right side
 class ChatPanel {
@@ -897,16 +897,16 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }
 
-  const inlineFixProvider = new InlineCodeFixProvider(localAI);
-  context.subscriptions.push(
-    vscode.languages.registerCodeActionsProvider(
-      { pattern: "**/*" },
-      inlineFixProvider,
-      {
-        providedCodeActionKinds: InlineCodeFixProvider.providedCodeActionKinds,
-      }
-    )
-  );
+  // const inlineFixProvider = new InlineCodeFixProvider(localAI);
+  // context.subscriptions.push(
+  //   vscode.languages.registerCodeActionsProvider(
+  //     { pattern: "**/*" },
+  //     inlineFixProvider,
+  //     {
+  //       providedCodeActionKinds: InlineCodeFixProvider.providedCodeActionKinds,
+  //     }
+  //   )
+  // );
 
   // Quick fix command - applies fix directly
 //   context.subscriptions.push(
