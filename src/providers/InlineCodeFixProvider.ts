@@ -28,7 +28,7 @@ export class InlineCodeFixProvider implements vscode.CodeActionProvider {
         for (const diagnostic of errors) {
             // Create "Fix" action
             const fixAction = new vscode.CodeAction(
-                '✨ Fix with Sidekick AI',
+                'Quick Fix (Inline)',
                 vscode.CodeActionKind.QuickFix
             );
             
@@ -46,7 +46,7 @@ export class InlineCodeFixProvider implements vscode.CodeActionProvider {
             
             // Create "Explain" action
             const explainAction = new vscode.CodeAction(
-                '💡 Explain Error',
+                'Explain Error',
                 vscode.CodeActionKind.QuickFix
             );
             
