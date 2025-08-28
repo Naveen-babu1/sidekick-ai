@@ -242,25 +242,25 @@
       "editor/context": [
         {
           "command": "sidekick-ai.openChat",
-          "group": "sidekick-ai@0",
+          "group": "navigation",
           "when": "editorTextFocus"
         },
         {
           "when": "editorTextFocus",
           "command": "sidekick-ai.explain",
-          "group": "sidekick-ai@1",
+          "group": "navigation",
           "title": "Explain Code - sidekick-ai"
         },
         {
           "when": "editorTextFocus",
           "command": "sidekick-ai.refactor",
-          "group": "sidekick-ai@2",
+          "group": "navigation",
           "title": "Refactor Code - sidekick-ai"
         },
         {
           "when": "editorTextFocus",
           "command": "sidekick-ai.generateTests",
-          "group": "sidekick-ai@3",
+          "group": "navigation",
           "title": "Generate Tests - sidekick-ai"
         }
       ]
